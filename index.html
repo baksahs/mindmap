@@ -1,0 +1,2751 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MindMap">
+<title>Mind Map Cloud Engine (PC & Mobile + GitHub Sync)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0f19; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; }
+  body { display: flex; flex-direction: column; position: fixed; inset: 0; }
+
+  /* 상단 헤더 */
+  header {
+    background: #111827; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top));
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid #1f2937; z-index: 15; gap: 8px; flex-shrink: 0;
+  }
+  .controls {
+    display: flex; gap: 5px; align-items: center; overflow-x: auto;
+    scrollbar-width: none; -ms-overflow-style: none; white-space: nowrap;
+  }
+  .controls::-webkit-scrollbar { display: none; }
+
+  button {
+    background: #2563eb; color: white; border: none; padding: 6px 10px; border-radius: 6px;
+    cursor: pointer; font-size: 12px; font-weight: 600; transition: 0.15s; flex-shrink: 0;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  button:hover:not(:disabled) { background: #1d4ed8; }
+  button:active:not(:disabled) { transform: scale(0.96); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.io-btn { background: #0284c7; }
+  button.quick-btn { background: #334155; border: 1px solid #475569; }
+  button.gh-btn { background: #24292f; border: 1px solid #57606a; color: #f0f6fc; }
+  button.gh-btn.connected { border-color: #2ea043; box-shadow: 0 0 8px rgba(46, 160, 67, 0.4); }
+  button.hist-btn { background: #4f46e5; }
+  button.fold-btn { background: #d97706; }
+  button.bvh-btn { background: #059669; }
+  button.bvh-btn.active { background: #10b981; box-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+  button.cut-btn { background: #e11d48; }
+  button.copy-btn { background: #0d9488; }
+  button.stress { background: #7c3aed; }
+
+  .mode-badge {
+    font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+    background: #1e293b; color: #38bdf8; border: 1px solid #38bdf8; flex-shrink: 0;
+  }
+  .mode-badge.editing { background: #422006; color: #facc15; border-color: #facc15; }
+  .mode-badge.warn { background: #450a0a; color: #fca5a5; border-color: #ef4444; }
+  .mode-badge.multi { background: #3b0764; color: #e9d5ff; border-color: #c084fc; }
+
+  .metrics {
+    font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; color: #38bdf8;
+    display: flex; gap: 9px; background: #0b0f19; padding: 5px 10px; border-radius: 6px;
+    border: 1px solid #1e293b; white-space: nowrap; overflow-x: auto; scrollbar-width: none;
+  }
+  .metrics::-webkit-scrollbar { display: none; }
+  .metrics span.highlight { color: #4ade80; font-weight: 700; }
+  .metrics span.bvh-stat { color: #fbbf24; font-weight: 700; }
+  .metrics span.io-stat { color: #a78bfa; font-weight: 700; }
+
+  #canvas-wrap { flex: 1; position: relative; overflow: hidden; touch-action: none; }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; outline: none; touch-action: none; }
+  canvas:active { cursor: grabbing; }
+
+  /* 인라인 에디터 */
+  #editor-container {
+    position: absolute; display: none; z-index: 30; transform-origin: top left;
+    align-items: center; gap: 4px;
+  }
+  #inline-editor {
+    background: #0f172a; color: #facc15; border: 2px solid #facc15; border-radius: 7px;
+    text-align: center; font-family: system-ui, -apple-system, sans-serif;
+    font-size: 16px; font-weight: 600; padding: 0 10px; outline: none;
+    box-shadow: 0 0 16px rgba(250, 204, 21, 0.45);
+    user-select: text; -webkit-user-select: text;
+  }
+  #editor-done-btn {
+    background: #eab308; color: #0f172a; font-weight: 800; padding: 0 10px;
+    height: 36px; border-radius: 7px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  }
+
+  /* 데스크톱 단축키 도움말 HUD */
+  .hud-help {
+    position: absolute; bottom: 14px; left: 14px; background: rgba(17, 24, 39, 0.92);
+    border: 1px solid #374151; padding: 9px 13px; border-radius: 8px; font-size: 11.5px;
+    color: #cbd5e1; pointer-events: none; line-height: 1.6; z-index: 12;
+  }
+  kbd { background: #1e293b; border: 1px solid #475569; border-radius: 4px; padding: 1px 5px; font-family: monospace; font-size: 10.5px; color: #38bdf8; }
+
+  /* 모바일 & 태블릿용 하단 플로팅 액션 독 */
+  #mobile-dock {
+    position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); left: 50%;
+    transform: translateX(-50%); display: flex; align-items: center; gap: 6px;
+    background: rgba(15, 23, 42, 0.94); border: 1px solid #334155;
+    padding: 7px 10px; border-radius: 14px; z-index: 20;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px);
+    max-width: 96vw; overflow-x: auto; scrollbar-width: none;
+  }
+  #mobile-dock::-webkit-scrollbar { display: none; }
+  .dock-btn {
+    background: #1e293b; color: #f8fafc; border: 1px solid #475569;
+    padding: 8px 11px; border-radius: 9px; font-size: 12.5px; font-weight: 600;
+  }
+  .dock-btn.primary { background: #2563eb; border-color: #3b82f6; }
+  .dock-btn.warn { background: #be123c; border-color: #f43f5e; }
+  .dock-btn.active-toggle { background: #7e22ce; border-color: #c084fc; color: #fff; box-shadow: 0 0 10px rgba(192, 132, 252, 0.5); }
+  .dock-divider { width: 1px; height: 22px; background: #334155; flex-shrink: 0; }
+
+  /* D-Pad 패널 */
+  #dpad-panel {
+    position: absolute; bottom: 74px; right: 14px; width: 196px;
+    background: rgba(15, 23, 42, 0.96); border: 1px solid #475569;
+    border-radius: 14px; padding: 10px; z-index: 25; display: none;
+    flex-direction: column; gap: 8px; box-shadow: 0 12px 28px rgba(0,0,0,0.65);
+    backdrop-filter: blur(8px);
+  }
+  #dpad-panel.open { display: flex; }
+  .dpad-header { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; font-weight: 700; color: #94a3b8; }
+  .dpad-mode-switch {
+    display: flex; background: #0b0f19; border-radius: 8px; padding: 2px; border: 1px solid #334155;
+  }
+  .dpad-mode-btn {
+    flex: 1; background: transparent; border: none; padding: 5px 4px; font-size: 11px;
+    color: #94a3b8; border-radius: 6px; justify-content: center;
+  }
+  .dpad-mode-btn.active { background: #2563eb; color: #ffffff; }
+  .dpad-mode-btn.active.struct-mode { background: #d97706; color: #ffffff; }
+  .dpad-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; align-items: center; justify-items: center;
+  }
+  .dpad-key {
+    width: 100%; height: 40px; justify-content: center; font-size: 15px;
+    background: #1e293b; border: 1px solid #475569; border-radius: 8px;
+  }
+  .dpad-key.center-key { font-size: 11px; font-weight: 700; color: #38bdf8; }
+
+  /* 우측 상단 줌 리셋 / 루트 포커스 */
+  #cam-controls {
+    position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 6px; z-index: 18;
+  }
+  .cam-btn {
+    background: rgba(17, 24, 39, 0.88); border: 1px solid #374151; color: #e2e8f0;
+    width: 36px; height: 36px; border-radius: 9px; justify-content: center; font-size: 15px;
+  }
+
+  /* GitHub 저장소 연동 & 로컬 백업 관리 모달 */
+  #gh-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(4px); z-index: 50; display: none;
+    align-items: center; justify-content: center; padding: 16px;
+  }
+  #gh-modal-backdrop.open { display: flex; }
+  .gh-modal {
+    background: #111827; border: 1px solid #334155; border-radius: 14px;
+    width: 100%; max-width: 440px; padding: 18px; display: flex; flex-direction: column;
+    gap: 12px; box-shadow: 0 20px 45px rgba(0,0,0,0.8); max-height: 92vh; overflow-y: auto;
+  }
+  .gh-modal h3 { font-size: 15px; color: #f8fafc; display: flex; justify-content: space-between; align-items: center; }
+  .gh-field { display: flex; flex-direction: column; gap: 4px; }
+  .gh-field label { font-size: 11.5px; color: #94a3b8; font-weight: 600; }
+  .gh-field input {
+    background: #0b0f19; border: 1px solid #334155; border-radius: 7px;
+    padding: 8px 10px; color: #f8fafc; font-size: 13px; outline: none;
+    user-select: text; -webkit-user-select: text;
+  }
+  .gh-field input:focus { border-color: #38bdf8; }
+  .gh-row { display: flex; gap: 8px; }
+  .gh-row .gh-field { flex: 1; }
+  .gh-status {
+    font-size: 12px; padding: 8px 10px; border-radius: 7px;
+    background: #0b0f19; border: 1px solid #1e293b; color: #38bdf8; line-height: 1.45;
+  }
+  .gh-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; margin-top: 4px; }
+  .gh-btn-push { background: #16a34a; }
+  .gh-btn-pull { background: #0284c7; }
+  .gh-btn-reset { background: #475569; margin-right: auto; }
+
+  @media (max-width: 860px) {
+    .hud-help { display: none; }
+    header { flex-direction: column; align-items: stretch; padding: 6px 10px; gap: 5px; }
+    .desktop-only { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="controls">
+    <span id="mode-indicator" class="mode-badge">탐색 모드 (NAV)</span>
+    <button id="btn-gh-modal" class="gh-btn" onclick="openGhModal()">🐙 GitHub 설정/동기화</button>
+    <button class="quick-btn" onclick="quickSaveCloudOrLocal()" title="GitHub 커밋 또는 로컬 즉시 백업 (Cmd+Shift+S)">⚡ 빠른저장</button>
+    <button class="quick-btn" onclick="quickLoadCloudOrLocal()" title="GitHub 풀 또는 로컬 즉시 복원 (Cmd+Shift+O)">⚡ 빠른로드</button>
+    <button class="io-btn" onclick="saveFileWithDialog()">💾 파일저장</button>
+    <button class="io-btn" onclick="openFileWithDialog()">📂 파일열기</button>
+    <input type="file" id="file-picker" accept=".mmap" style="display:none" onchange="uploadBinaryFile(event)" />
+    <button id="btn-undo" class="hist-btn" onclick="triggerUndo()" disabled>↩ Undo (0)</button>
+    <button id="btn-redo" class="hist-btn" onclick="triggerRedo()" disabled>↪ Redo (0)</button>
+    <button class="desktop-only" onclick="enterEditMode()">편집 (Space)</button>
+    <button class="cut-btn desktop-only" onclick="cutSelectedNodes()">✂️ (Cmd+X)</button>
+    <button class="copy-btn desktop-only" onclick="copySelectedNodes(false)">복사 (Cmd+C)</button>
+    <button class="copy-btn desktop-only" onclick="pasteOrMoveNodes()">붙여넣기 (Cmd+V)</button>
+    <button class="fold-btn desktop-only" onclick="toggleFoldSelected()">폴딩 (F)</button>
+    <button id="btn-bvh" class="bvh-btn" onclick="toggleBvhDebug()">BVH</button>
+    <button class="stress" onclick="stressTest()">⚡ +1,000</button>
+  </div>
+  <div class="metrics">
+    <span id="m-io" class="io-stat">AutoBackup: Ready</span>
+    <span id="m-cull" class="highlight">Draw: 0 / 0</span>
+    <span id="m-bvh" class="bvh-stat">BVH: 0</span>
+    <span id="m-py-time">Layout: 0 µs</span>
+    <span id="m-py-mem">Nodes: 0</span>
+  </div>
+</header>
+
+<div id="canvas-wrap">
+  <canvas id="mindmap-canvas" tabindex="0"></canvas>
+
+  <!-- 인라인 에디터 컨테이너 -->
+  <div id="editor-container">
+    <input type="text" id="inline-editor" autocomplete="off" spellcheck="false" enterkeyhint="done" />
+    <button id="editor-done-btn" onclick="exitEditMode(true)" title="편집 완료 (Enter)">✓</button>
+  </div>
+
+  <!-- 카메라 퀵 컨트롤 -->
+  <div id="cam-controls">
+    <button class="cam-btn" onclick="zoomStep(1.25)" title="확대">+</button>
+    <button class="cam-btn" onclick="zoomStep(0.8)" title="축소">−</button>
+    <button class="cam-btn" onclick="centerOnCursor()" title="현재 노드로 카메라 이동">🎯</button>
+  </div>
+
+  <!-- D-Pad (탐색 & 계층 이동 패드) -->
+  <div id="dpad-panel">
+    <div class="dpad-header">
+      <span id="dpad-title">🧭 방향 탐색 모드</span>
+      <button style="background:transparent;padding:2px 5px;color:#94a3b8;" onclick="toggleDpadPanel()">✕</button>
+    </div>
+    <div class="dpad-mode-switch">
+      <button id="dpad-mode-nav" class="dpad-mode-btn active" onclick="setDpadMode('nav')">포커스 이동</button>
+      <button id="dpad-mode-struct" class="dpad-mode-btn" onclick="setDpadMode('struct')">계층·순서 변경</button>
+    </div>
+    <div class="dpad-grid">
+      <div></div>
+      <button class="dpad-key" onclick="handleDpadArrow('ArrowUp')">▲</button>
+      <div></div>
+      <button class="dpad-key" onclick="handleDpadArrow('ArrowLeft')">◀</button>
+      <button class="dpad-key center-key" onclick="toggleCursorNodeSelection()">선택</button>
+      <button class="dpad-key" onclick="handleDpadArrow('ArrowRight')">▶</button>
+      <div></div>
+      <button class="dpad-key" onclick="handleDpadArrow('ArrowDown')">▼</button>
+      <div></div>
+    </div>
+  </div>
+
+  <!-- 하단 플로팅 액션 독 -->
+  <div id="mobile-dock">
+    <button class="dock-btn primary" onclick="createChildNode()">＋자식</button>
+    <button class="dock-btn primary" onclick="createSiblingNode()">＋형제</button>
+    <button class="dock-btn" onclick="enterEditMode()">✏️편집</button>
+    <button class="dock-btn" onclick="toggleFoldSelected()">접기/펼치기</button>
+    <div class="dock-divider"></div>
+    <button id="btn-multi-mode" class="dock-btn" onclick="toggleMobileMultiSelect()">☑️다중</button>
+    <button id="btn-dpad-toggle" class="dock-btn" onclick="toggleDpadPanel()">🧭이동패드</button>
+    <div class="dock-divider"></div>
+    <button class="dock-btn" onclick="cutSelectedNodes()">✂️이동준비</button>
+    <button class="dock-btn" onclick="copySelectedNodes(false)">📋복사</button>
+    <button class="dock-btn" onclick="pasteOrMoveNodes()">📥붙여넣기</button>
+    <button class="dock-btn warn" onclick="deleteSelected()">🗑️삭제</button>
+  </div>
+
+  <!-- 데스크톱 HUD 도움말 -->
+  <div class="hud-help">
+    <div>
+      🐙 <b>GitHub 클라우드 & 로컬 I/O:</b>
+      <kbd>Cmd/Ctrl+Shift+S</kbd> GitHub 커밋(또는 빠른저장) &nbsp;|&nbsp;
+      <kbd>Cmd/Ctrl+Shift+O</kbd> GitHub 불러오기 &nbsp;|&nbsp;
+      <kbd>Cmd/Ctrl+S/O</kbd> 로컬 .mmap 파일 저장·열기
+    </div>
+    <div>
+      🖱️/👆 <b>조작:</b>
+      드래그 팬 이동 | 휠·핀치 줌 | <b>더블탭(더블클릭)</b> 편집 | <b>롱프레스</b> 다중 선택 | <kbd>Alt+↑↓←→</kbd> 계층·순서 이동
+    </div>
+  </div>
+</div>
+
+<!-- GitHub REST API 설정 & 클라우드 동기화 모달 -->
+<div id="gh-modal-backdrop" onclick="if(event.target===this) closeGhModal()">
+  <div class="gh-modal">
+    <h3>
+      <span>🐙 GitHub 저장소 연동 & 백업 관리</span>
+      <button style="background:transparent;color:#94a3b8;font-size:15px;" onclick="closeGhModal()">✕</button>
+    </h3>
+    <div class="gh-field">
+      <label>GitHub Personal Access Token (repo 또는 contents 권한)</label>
+      <input type="password" id="gh-token" placeholder="ghp_... 또는 github_pat_..." autocomplete="off" />
+    </div>
+    <div class="gh-row">
+      <div class="gh-field">
+        <label>소유자 (Owner / 유저명)</label>
+        <input type="text" id="gh-owner" placeholder="예: octocat" />
+      </div>
+      <div class="gh-field">
+        <label>저장소 이름 (Repository)</label>
+        <input type="text" id="gh-repo" placeholder="예: mindmap-repo" />
+      </div>
+    </div>
+    <div class="gh-row">
+      <div class="gh-field">
+        <label>브랜치 (Branch)</label>
+        <input type="text" id="gh-branch" placeholder="main" value="main" />
+      </div>
+      <div class="gh-field">
+        <label>.mmap 파일 경로 (Path)</label>
+        <input type="text" id="gh-path" placeholder="mindmap_data.mmap" value="mindmap_data.mmap" />
+      </div>
+    </div>
+    <div id="gh-status-box" class="gh-status">
+      설정 저장 후 <b>⚡ 빠른저장(Cmd+Shift+S)</b>을 누르면 지정된 GitHub 저장소에 <code>.mmap</code> 바이너리가 즉시 커밋됩니다.
+    </div>
+    <div class="gh-actions">
+      <button class="gh-btn-reset" onclick="resetToDefaultMindMap()" title="기본 튜토리얼 트리로 초기화">🔄 초기 트리로 리셋</button>
+      <button onclick="saveGhConfig()">설정 저장</button>
+      <button class="gh-btn-pull" onclick="pullFromGitHub()">⬇️ GitHub에서 불러오기</button>
+      <button class="gh-btn-push" onclick="pushToGitHub()">⬆️ GitHub로 즉시 커밋</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==========================================
+// 0. 동적 PWA Web App Manifest 등록 (단일 파일 홈 화면 설치 지원)
+// ==========================================
+(function setupPwaManifest() {
+  const manifest = {
+    name: 'Mind Map Cloud Engine',
+    short_name: 'MindMap',
+    start_url: '.',
+    display: 'standalone',
+    background_color: '#0b0f19',
+    theme_color: '#111827',
+    icons: [{
+      src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="%23111827"/><circle cx="30" cy="50" r="12" fill="%2338bdf8"/><circle cx="72" cy="30" r="10" fill="%234ade80"/><circle cx="72" cy="70" r="10" fill="%23facc15"/><path d="M42 50 C55 50 55 30 62 30 M42 50 C55 50 55 70 62 70" stroke="%2394a3b8" stroke-width="5" fill="none"/></svg>',
+      sizes: '192x192',
+      type: 'image/svg+xml'
+    }]
+  };
+  const link = document.createElement('link');
+  link.rel = 'manifest';
+  link.href = 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest));
+  document.head.appendChild(link);
+})();
+
+// ==========================================
+// 1. 코어 유틸리티 & 노드 자료구조 (MindNode)
+// ==========================================
+function calcNodeWidth(text) {
+  let w = 34.0;
+  for (let i = 0; i < text.length; i++) {
+    w += text.charCodeAt(i) > 127 ? 13.2 : 7.6;
+  }
+  return Math.max(110.0, Math.round(w * 10) / 10);
+}
+
+class MindNode {
+  constructor(id, text, parentId = null) {
+    this.id = id;
+    this.text = text;
+    this.parentId = parentId;
+    this.children = [];
+    this.span = 1;
+    this.depth = 0;
+    this.w = calcNodeWidth(text);
+    this.x = 0.0;
+    this.y = 0.0;
+    this.folded = false;
+    this.hiddenCount = 0;
+    this.visSize = 1;
+    this.bMinX = 0.0;
+    this.bMinY = 0.0;
+    this.bMaxX = 0.0;
+    this.bMaxY = 0.0;
+  }
+}
+
+// ==========================================
+// 2. 델타 커맨드 패턴 (Undo / Redo)
+// ==========================================
+class RenameCmd {
+  constructor(nodeId, oldText, oldW, newText, newW, beforeFocus, afterFocus) {
+    this.label = '텍스트 수정';
+    this.nodeId = nodeId;
+    this.oldText = oldText;
+    this.oldW = oldW;
+    this.newText = newText;
+    this.newW = newW;
+    this.beforeFocus = beforeFocus;
+    this.afterFocus = afterFocus;
+  }
+  undo(eng) {
+    const node = eng.nodes.get(this.nodeId);
+    if (node) { node.text = this.oldText; node.w = this.oldW; }
+    return [this.beforeFocus[0], [...this.beforeFocus[1]]];
+  }
+  redo(eng) {
+    const node = eng.nodes.get(this.nodeId);
+    if (node) { node.text = this.newText; node.w = this.newW; }
+    return [this.afterFocus[0], [...this.afterFocus[1]]];
+  }
+}
+
+class FoldCmd {
+  constructor(label, changes, beforeFocus, afterFocus) {
+    this.label = label;
+    this.changes = changes;
+    this.beforeFocus = beforeFocus;
+    this.afterFocus = afterFocus;
+  }
+  undo(eng) {
+    for (const [nid, oldState, , hCnt] of this.changes) {
+      const node = eng.nodes.get(nid);
+      if (node) { node.folded = oldState; node.hiddenCount = oldState ? hCnt : 0; }
+    }
+    return [this.beforeFocus[0], [...this.beforeFocus[1]]];
+  }
+  redo(eng) {
+    for (const [nid, , newState, hCnt] of this.changes) {
+      const node = eng.nodes.get(nid);
+      if (node) { node.folded = newState; node.hiddenCount = newState ? hCnt : 0; }
+    }
+    return [this.afterFocus[0], [...this.afterFocus[1]]];
+  }
+}
+
+class ReparentCmd {
+  constructor(label, parentLinks, boundaryEdges, foldStates, beforeFocus, afterFocus) {
+    this.label = label;
+    this.parentLinks = parentLinks;
+    this.boundaryEdges = boundaryEdges;
+    this.foldStates = foldStates;
+    this.beforeFocus = beforeFocus;
+    this.afterFocus = afterFocus;
+  }
+  undo(eng) {
+    for (const [nid, oldP] of this.parentLinks) {
+      if (eng.nodes.has(nid)) eng.nodes.get(nid).parentId = oldP;
+    }
+    for (const [pId, oldCh] of this.boundaryEdges) {
+      if (eng.nodes.has(pId)) eng.nodes.get(pId).children = [...oldCh];
+    }
+    for (const [nid, oldF, oldH] of this.foldStates) {
+      if (eng.nodes.has(nid)) {
+        const n = eng.nodes.get(nid);
+        n.folded = oldF; n.hiddenCount = oldH;
+      }
+    }
+    return [this.beforeFocus[0], [...this.beforeFocus[1]]];
+  }
+  redo(eng) {
+    for (const [nid, , newP] of this.parentLinks) {
+      if (eng.nodes.has(nid)) eng.nodes.get(nid).parentId = newP;
+    }
+    for (const [pId, , newCh] of this.boundaryEdges) {
+      if (eng.nodes.has(pId)) eng.nodes.get(pId).children = [...newCh];
+    }
+    for (const [nid, , , newF, newH] of this.foldStates) {
+      if (eng.nodes.has(nid)) {
+        const n = eng.nodes.get(nid);
+        n.folded = newF; n.hiddenCount = newH;
+      }
+    }
+    return [this.afterFocus[0], [...this.afterFocus[1]]];
+  }
+}
+
+class SubgraphPatchCmd {
+  constructor(label, isInsert, deltaNodes, boundaryEdges, unfoldedAncestors, beforeFocus, afterFocus) {
+    this.label = label;
+    this.isInsert = isInsert;
+    this.deltaNodes = deltaNodes;
+    this.boundaryEdges = boundaryEdges;
+    this.unfoldedAncestors = unfoldedAncestors;
+    this.beforeFocus = beforeFocus;
+    this.afterFocus = afterFocus;
+  }
+  undo(eng) {
+    if (this.isInsert) {
+      for (const node of this.deltaNodes) eng.nodes.delete(node.id);
+    } else {
+      for (const node of this.deltaNodes) eng.nodes.set(node.id, node);
+    }
+    for (const [pId, oldCh] of this.boundaryEdges) {
+      if (eng.nodes.has(pId)) eng.nodes.get(pId).children = [...oldCh];
+    }
+    for (const [ancId, prevHCnt] of this.unfoldedAncestors) {
+      if (eng.nodes.has(ancId)) {
+        const n = eng.nodes.get(ancId);
+        n.folded = true; n.hiddenCount = prevHCnt;
+      }
+    }
+    return [this.beforeFocus[0], [...this.beforeFocus[1]]];
+  }
+  redo(eng) {
+    for (const [ancId] of this.unfoldedAncestors) {
+      if (eng.nodes.has(ancId)) {
+        const n = eng.nodes.get(ancId);
+        n.folded = false; n.hiddenCount = 0;
+      }
+    }
+    if (this.isInsert) {
+      for (const node of this.deltaNodes) eng.nodes.set(node.id, node);
+    } else {
+      for (const node of this.deltaNodes) eng.nodes.delete(node.id);
+    }
+    for (const [pId, , newCh] of this.boundaryEdges) {
+      if (eng.nodes.has(pId)) eng.nodes.get(pId).children = [...newCh];
+    }
+    return [this.afterFocus[0], [...this.afterFocus[1]]];
+  }
+}
+
+// ==========================================
+// 3. 마인드맵 코어 엔진 (MindMapEngine)
+// ==========================================
+class MindMapEngine {
+  static MAX_HISTORY = 100;
+  static FORMAT_VERSION = 1;
+
+  constructor() {
+    this.nodes = new Map();
+    this.nextId = 1;
+    this.undoStack = [];
+    this.redoStack = [];
+    this.lastIoStat = 'AutoBackup: Ready';
+    this.initDefaultTree();
+  }
+
+  initDefaultTree() {
+    this.nodes.clear();
+    this.nextId = 1;
+    this.undoStack.length = 0;
+    this.redoStack.length = 0;
+
+    this.rootId = this._createRawNode('중심 주제 (Root)', null);
+    const c1 = this._createRawNode('🐙 GitHub 저장소 클라우드 동기화', this.rootId);
+    const c2 = this._createRawNode('📱 모바일 멀티터치 & 플로팅 독', this.rootId);
+    const c3 = this._createRawNode('💾 IndexedDB 실시간 자동 백업', this.rootId);
+
+    this._createRawNode('상단 [🐙 GitHub 설정/동기화]에서 토큰과 저장소 등록', c1);
+    this._createRawNode('⚡ 빠른저장(Cmd+Shift+S): GitHub 저장소에 .mmap 즉시 커밋', c1);
+    this._createRawNode('⚡ 빠른로드(Cmd+Shift+O): GitHub 저장소에서 최신 .mmap 로드', c1);
+
+    this._createRawNode('1손가락 팬 / 2손가락 핀치 줌 / 더블탭 편집 / 롱프레스 다중선택', c2);
+    this._createRawNode('하단 플로팅 독 & 🧭이동패드(Alt 계층·순서 변경) 완벽 지원', c2);
+
+    this._createRawNode('모든 편집 작업 후 350ms 이내 브라우저 IndexedDB 자동 백업', c3);
+    this._createRawNode('새로고침하거나 앱을 다시 열어도 마지막 작업 상태 즉시 복원', c3);
+  }
+
+  _createRawNode(text, parentId, afterSiblingId = null) {
+    const nodeId = this.nextId++;
+    const node = new MindNode(nodeId, text, parentId);
+    this.nodes.set(nodeId, node);
+
+    if (parentId !== null && this.nodes.has(parentId)) {
+      const children = this.nodes.get(parentId).children;
+      if (afterSiblingId !== null && children.includes(afterSiblingId)) {
+        const idx = children.indexOf(afterSiblingId);
+        children.splice(idx + 1, 0, nodeId);
+      } else {
+        children.push(nodeId);
+      }
+    }
+    return nodeId;
+  }
+
+  _countAllDescendants(nodeId) {
+    let count = 0;
+    const stack = [...this.nodes.get(nodeId).children];
+    while (stack.length > 0) {
+      const currId = stack.pop();
+      count++;
+      const currNode = this.nodes.get(currId);
+      if (currNode && currNode.children.length > 0) {
+        stack.push(...currNode.children);
+      }
+    }
+    return count;
+  }
+
+  _refreshFoldedAncestors(startIds, foldTracker) {
+    const visited = new Set();
+    for (const nid of startIds) {
+      let curr = this.nodes.get(nid);
+      while (curr) {
+        if (visited.has(curr.id)) break;
+        visited.add(curr.id);
+        if (curr.folded) {
+          if (!foldTracker.has(curr.id)) {
+            foldTracker.set(curr.id, [curr.folded, curr.hiddenCount]);
+          }
+          curr.hiddenCount = this._countAllDescendants(curr.id);
+        }
+        curr = curr.parentId ? this.nodes.get(curr.parentId) : null;
+      }
+    }
+  }
+
+  _getFullPreorder() {
+    const order = [];
+    const stack = [this.rootId];
+    while (stack.length > 0) {
+      const uid = stack.pop();
+      order.push(uid);
+      const unode = this.nodes.get(uid);
+      for (let i = unode.children.length - 1; i >= 0; i--) {
+        stack.push(unode.children[i]);
+      }
+    }
+    return order;
+  }
+
+  _recordCommand(cmd) {
+    if (this.undoStack.length >= MindMapEngine.MAX_HISTORY) {
+      this.undoStack.shift();
+    }
+    this.undoStack.push(cmd);
+    this.redoStack.length = 0;
+  }
+
+  serializeBinary() {
+    const t0 = performance.now();
+    const fullOrder = this._getFullPreorder();
+    const count = fullOrder.length;
+    const encoder = new TextEncoder();
+
+    const encodedStrings = [];
+    let totalStrBytes = 0;
+
+    for (const nid of fullOrder) {
+      const n = this.nodes.get(nid);
+      let utf8 = encoder.encode(n.text);
+      if (utf8.byteLength > 65535) utf8 = utf8.subarray(0, 65535);
+      encodedStrings.push(utf8);
+      totalStrBytes += utf8.byteLength;
+    }
+
+    const headerSize = 16;
+    const recordSize = 11;
+    const totalSize = headerSize + count * recordSize + totalStrBytes;
+
+    const buffer = new ArrayBuffer(totalSize);
+    const view = new DataView(buffer);
+    const uint8 = new Uint8Array(buffer);
+
+    uint8[0] = 0x4D; uint8[1] = 0x4D; uint8[2] = 0x41; uint8[3] = 0x50;
+    view.setUint32(4, MindMapEngine.FORMAT_VERSION, true);
+    view.setUint32(8, count, true);
+    view.setUint32(12, this.nextId, true);
+
+    let recOffset = headerSize;
+    let strOffset = headerSize + count * recordSize;
+
+    for (let i = 0; i < count; i++) {
+      const n = this.nodes.get(fullOrder[i]);
+      const utf8 = encodedStrings[i];
+      view.setUint32(recOffset, n.id, true);
+      view.setUint32(recOffset + 4, n.parentId || 0, true);
+      view.setUint16(recOffset + 8, utf8.byteLength, true);
+      view.setUint8(recOffset + 10, n.folded ? 1 : 0);
+      recOffset += recordSize;
+
+      uint8.set(utf8, strOffset);
+      strOffset += utf8.byteLength;
+    }
+
+    const elapsedUs = Math.round((performance.now() - t0) * 1000 * 100) / 100;
+    return { buffer, elapsedUs };
+  }
+
+  deserializeBinary(buffer) {
+    const t0 = performance.now();
+    if (buffer.byteLength < 16) throw new Error('유효하지 않은 파일입니다.');
+
+    const view = new DataView(buffer);
+    const uint8 = new Uint8Array(buffer);
+    const magic = String.fromCharCode(uint8[0], uint8[1], uint8[2], uint8[3]);
+    if (magic !== 'MMAP') throw new Error('MMAP 시그니처가 일치하지 않습니다.');
+
+    const version = view.getUint32(4, true);
+    if (version !== MindMapEngine.FORMAT_VERSION) {
+      throw new Error(`지원하지 않는 버전입니다: v${version}`);
+    }
+
+    const count = view.getUint32(8, true);
+    const nextId = view.getUint32(12, true);
+    const recTableEnd = 16 + count * 11;
+    if (buffer.byteLength < recTableEnd) throw new Error('손상된 파일입니다.');
+
+    const decoder = new TextDecoder('utf-8');
+    const newNodes = new Map();
+    const orderIds = [];
+    let strPos = recTableEnd;
+    let newRootId = null;
+
+    for (let i = 0; i < count; i++) {
+      const offset = 16 + i * 11;
+      const nid = view.getUint32(offset, true);
+      const pid = view.getUint32(offset + 4, true);
+      const textLen = view.getUint16(offset + 8, true);
+      const flags = view.getUint8(offset + 10);
+
+      const rawText = decoder.decode(uint8.subarray(strPos, strPos + textLen));
+      strPos += textLen;
+
+      const actualPid = pid !== 0 ? pid : null;
+      const node = new MindNode(nid, rawText, actualPid);
+      node.folded = Boolean(flags & 1);
+
+      newNodes.set(nid, node);
+      orderIds.push(nid);
+
+      if (actualPid === null) newRootId = nid;
+      else if (newNodes.has(actualPid)) newNodes.get(actualPid).children.push(nid);
+    }
+
+    if (newRootId === null || newNodes.size === 0) throw new Error('루트 노드가 없습니다.');
+
+    const descCounts = new Map();
+    for (let i = orderIds.length - 1; i >= 0; i--) {
+      const uid = orderIds[i];
+      const unode = newNodes.get(uid);
+      let cnt = 0;
+      for (const vid of unode.children) cnt += 1 + (descCounts.get(vid) || 0);
+      descCounts.set(uid, cnt);
+      if (unode.folded) unode.hiddenCount = cnt;
+    }
+
+    this.nodes = newNodes;
+    this.rootId = newRootId;
+    this.nextId = Math.max(nextId, Math.max(...newNodes.keys()) + 1);
+    this.undoStack.length = 0;
+    this.redoStack.length = 0;
+
+    return Math.round((performance.now() - t0) * 1000 * 100) / 100;
+  }
+
+  reparentNodes(movingIds, targetParentId, insertAfterId, beforeFocus, actionLabel = '노드 이동') {
+    if (!this.nodes.has(targetParentId)) {
+      return [beforeFocus[0], [...beforeFocus[1]], '오류: 대상 부모 노드가 없습니다.'];
+    }
+    const rawSet = new Set(movingIds.filter(nid => nid !== this.rootId && this.nodes.has(nid)));
+    if (rawSet.size === 0) {
+      return [beforeFocus[0], [...beforeFocus[1]], '루트 노드는 이동할 수 없습니다.'];
+    }
+
+    let currAnc = targetParentId;
+    while (currAnc !== null) {
+      if (rawSet.has(currAnc)) {
+        return [beforeFocus[0], [...beforeFocus[1]], '⚠️ 상위 노드를 하위 자손으로 이동할 수 없습니다!'];
+      }
+      currAnc = this.nodes.get(currAnc).parentId;
+    }
+
+    const fullOrder = this._getFullPreorder();
+    const orderedMoving = fullOrder.filter(nid => rawSet.has(nid));
+
+    const newParentMap = new Map();
+    for (const uid of orderedMoving) {
+      let anc = this.nodes.get(uid).parentId;
+      while (anc !== null && !rawSet.has(anc)) anc = this.nodes.get(anc).parentId;
+      newParentMap.set(uid, anc !== null ? anc : targetParentId);
+    }
+
+    const affectedParents = new Map();
+    const foldTracker = new Map();
+    const snapshotParent = (pid) => {
+      if (!affectedParents.has(pid) && this.nodes.has(pid)) {
+        affectedParents.set(pid, [...this.nodes.get(pid).children]);
+      }
+    };
+
+    const targetNode = this.nodes.get(targetParentId);
+    if (targetNode.folded) {
+      foldTracker.set(targetParentId, [true, targetNode.hiddenCount]);
+      targetNode.folded = false;
+      targetNode.hiddenCount = 0;
+    }
+
+    const parentLinks = [];
+    const nodesToReattach = [];
+
+    for (const uid of orderedMoving) {
+      const uNode = this.nodes.get(uid);
+      const oldP = uNode.parentId;
+      const newP = newParentMap.get(uid);
+      if (oldP === newP && newP !== targetParentId) continue;
+      if (oldP !== null && this.nodes.has(oldP)) snapshotParent(oldP);
+      snapshotParent(newP);
+      nodesToReattach.push(uid);
+    }
+
+    if (nodesToReattach.length === 0) return [beforeFocus[0], [...beforeFocus[1]], null];
+
+    const reattachSet = new Set(nodesToReattach);
+    for (const pid of affectedParents.keys()) {
+      const pNode = this.nodes.get(pid);
+      pNode.children = pNode.children.filter(ch => !reattachSet.has(ch));
+    }
+
+    let insertCursorId = insertAfterId;
+    for (const uid of nodesToReattach) {
+      const uNode = this.nodes.get(uid);
+      const oldP = uNode.parentId;
+      const newP = newParentMap.get(uid);
+      uNode.parentId = newP;
+      parentLinks.push([uid, oldP, newP]);
+
+      const pChildren = this.nodes.get(newP).children;
+      if (newP === targetParentId && insertCursorId !== null && pChildren.includes(insertCursorId)) {
+        const idx = pChildren.indexOf(insertCursorId);
+        pChildren.splice(idx + 1, 0, uid);
+        insertCursorId = uid;
+      } else {
+        pChildren.push(uid);
+      }
+    }
+
+    const boundaryEdges = [];
+    for (const [pid, oldCh] of affectedParents.entries()) {
+      const newCh = [...this.nodes.get(pid).children];
+      if (oldCh.length !== newCh.length || oldCh.some((v, i) => v !== newCh[i])) {
+        boundaryEdges.push([pid, oldCh, newCh]);
+      }
+    }
+
+    if (boundaryEdges.length === 0 && parentLinks.length === 0) {
+      return [beforeFocus[0], [...beforeFocus[1]], '이미 해당 위치에 있습니다.'];
+    }
+
+    this._refreshFoldedAncestors(new Set(affectedParents.keys()), foldTracker);
+    const foldStates = [];
+    for (const [nid, [oldF, oldH]] of foldTracker.entries()) {
+      const n = this.nodes.get(nid);
+      foldStates.push([nid, oldF, oldH, n.folded, n.hiddenCount]);
+    }
+
+    const afterFocus = [orderedMoving[0], [...orderedMoving]];
+    const cmd = new ReparentCmd(
+      `${actionLabel} (${orderedMoving.length}개)`,
+      parentLinks,
+      boundaryEdges,
+      foldStates,
+      beforeFocus,
+      afterFocus
+    );
+    this._recordCommand(cmd);
+    return [orderedMoving[0], orderedMoving, `이동 완료 (${orderedMoving.length}개)`];
+  }
+
+  structuralStepMove(direction, cursorId, selectedIds, beforeFocus) {
+    if (cursorId === this.rootId || !this.nodes.has(cursorId)) {
+      return [beforeFocus[0], [...beforeFocus[1]], '루트 노드는 구조 이동할 수 없습니다.'];
+    }
+    const curNode = this.nodes.get(cursorId);
+    const parentId = curNode.parentId;
+    if (parentId === null || !this.nodes.has(parentId)) {
+      return [beforeFocus[0], [...beforeFocus[1]], null];
+    }
+    const parentNode = this.nodes.get(parentId);
+    const siblings = parentNode.children;
+
+    if (direction === 'left') {
+      const grandparentId = parentNode.parentId;
+      if (grandparentId === null) {
+        return [beforeFocus[0], [...beforeFocus[1]], '⚠️ 루트 직속 자식은 더 이상 승격할 수 없습니다.'];
+      }
+      return this.reparentNodes(selectedIds, grandparentId, parentId, beforeFocus, '상위 계층 승격');
+    }
+
+    if (direction === 'right') {
+      const selSet = new Set(selectedIds);
+      const idx = siblings.indexOf(cursorId);
+      let prevSibId = null;
+      for (let k = idx - 1; k >= 0; k--) {
+        if (!selSet.has(siblings[k])) { prevSibId = siblings[k]; break; }
+      }
+      if (prevSibId === null) {
+        return [beforeFocus[0], [...beforeFocus[1]], '⚠️ 바로 위에 편입할 형제 노드가 없습니다.'];
+      }
+      return this.reparentNodes(selectedIds, prevSibId, null, beforeFocus, '하위 계층 편입');
+    }
+
+    if (direction === 'up' || direction === 'down') {
+      const selSet = new Set(selectedIds);
+      const selInSibs = siblings.filter(s => selSet.has(s));
+      if (selInSibs.length === 0) return [beforeFocus[0], [...beforeFocus[1]], null];
+
+      const oldCh = [...siblings];
+      const newList = [...siblings];
+
+      if (direction === 'up') {
+        if (newList.indexOf(selInSibs[0]) === 0) return [beforeFocus[0], [...beforeFocus[1]], null];
+        for (const sId of selInSibs) {
+          const i = newList.indexOf(sId);
+          [newList[i - 1], newList[i]] = [newList[i], newList[i - 1]];
+        }
+      } else {
+        if (newList.indexOf(selInSibs[selInSibs.length - 1]) === newList.length - 1) {
+          return [beforeFocus[0], [...beforeFocus[1]], null];
+        }
+        for (let idx = selInSibs.length - 1; idx >= 0; idx--) {
+          const sId = selInSibs[idx];
+          const i = newList.indexOf(sId);
+          [newList[i], newList[i + 1]] = [newList[i + 1], newList[i]];
+        }
+      }
+
+      parentNode.children = newList;
+      const label = direction === 'up' ? '순서 위로 이동' : '순서 아래로 이동';
+      const cmd = new ReparentCmd(label, [], [[parentId, oldCh, [...newList]]], [], beforeFocus, beforeFocus);
+      this._recordCommand(cmd);
+      return [beforeFocus[0], [...beforeFocus[1]], label];
+    }
+    return [beforeFocus[0], [...beforeFocus[1]], null];
+  }
+
+  toggleFoldBatch(targetIds, forceUnfold, beforeFocus) {
+    const validNodes = targetIds
+      .map(nid => this.nodes.get(nid))
+      .filter(n => n && n.children.length > 0);
+    if (validNodes.length === 0) return [beforeFocus[0], [...beforeFocus[1]], null];
+
+    const targetState = forceUnfold ? false : validNodes.some(n => !n.folded);
+    const changes = [];
+
+    for (const n of validNodes) {
+      if (n.folded !== targetState) {
+        const oldState = n.folded;
+        const hCnt = targetState ? this._countAllDescendants(n.id) : n.hiddenCount;
+        n.folded = targetState;
+        n.hiddenCount = targetState ? hCnt : 0;
+        changes.push([n.id, oldState, targetState, hCnt]);
+      }
+    }
+    if (changes.length === 0) return [beforeFocus[0], [...beforeFocus[1]], null];
+
+    const actionStr = targetState ? '브랜치 접기' : '브랜치 펼치기';
+    const cmd = new FoldCmd(`${actionStr} (${changes.length}개)`, changes, beforeFocus, beforeFocus);
+    this._recordCommand(cmd);
+    return [beforeFocus[0], [...beforeFocus[1]], actionStr];
+  }
+
+  addNode(text, parentId, afterSiblingId, beforeFocus) {
+    if (!this.nodes.has(parentId)) parentId = this.rootId;
+    const parentNode = this.nodes.get(parentId);
+    const unfoldedAnc = [];
+    if (parentNode.folded) {
+      unfoldedAnc.push([parentId, parentNode.hiddenCount]);
+      parentNode.folded = false;
+      parentNode.hiddenCount = 0;
+    }
+
+    const oldChildren = [...parentNode.children];
+    const newId = this._createRawNode(text, parentId, afterSiblingId);
+    const newChildren = [...parentNode.children];
+
+    const afterFocus = [newId, [newId]];
+    const cmd = new SubgraphPatchCmd(
+      '노드 생성',
+      true,
+      [this.nodes.get(newId)],
+      [[parentId, oldChildren, newChildren]],
+      unfoldedAnc,
+      beforeFocus,
+      afterFocus
+    );
+    this._recordCommand(cmd);
+    return [newId, [newId]];
+  }
+
+  updateText(nodeId, newText, beforeFocus) {
+    if (!this.nodes.has(nodeId)) return [beforeFocus[0], [...beforeFocus[1]]];
+    const node = this.nodes.get(nodeId);
+    if (node.text === newText) return [nodeId, [...beforeFocus[1]]];
+
+    const oldText = node.text, oldW = node.w;
+    const newW = calcNodeWidth(newText);
+    node.text = newText; node.w = newW;
+
+    const afterFocus = [nodeId, [nodeId]];
+    const cmd = new RenameCmd(nodeId, oldText, oldW, newText, newW, beforeFocus, afterFocus);
+    this._recordCommand(cmd);
+    return [nodeId, [nodeId]];
+  }
+
+  deleteNodesBatch(targetIds, beforeFocus) {
+    const toDelete = new Set(targetIds.filter(nid => nid !== this.rootId && this.nodes.has(nid)));
+    if (toDelete.size === 0) return [this.rootId, [this.rootId]];
+
+    const stack = [...toDelete];
+    while (stack.length > 0) {
+      const currId = stack.pop();
+      const currNode = this.nodes.get(currId);
+      if (currNode) {
+        for (const chId of currNode.children) {
+          if (!toDelete.has(chId)) {
+            toDelete.add(chId);
+            stack.push(chId);
+          }
+        }
+      }
+    }
+
+    let fallbackId = this.rootId;
+    for (const nid of targetIds) {
+      if (this.nodes.has(nid)) {
+        let pId = this.nodes.get(nid).parentId;
+        while (pId !== null && toDelete.has(pId)) pId = this.nodes.get(pId).parentId;
+        if (pId !== null && this.nodes.has(pId)) {
+          const siblings = this.nodes.get(pId).children;
+          const surviving = siblings.filter(s => !toDelete.has(s));
+          if (surviving.length > 0) {
+            const origIdx = siblings.includes(nid) ? siblings.indexOf(nid) : 0;
+            fallbackId = surviving[Math.min(origIdx, surviving.length - 1)];
+          } else {
+            fallbackId = pId;
+          }
+          break;
+        }
+      }
+    }
+
+    const boundaryParents = new Set();
+    for (const nid of toDelete) {
+      const pId = this.nodes.get(nid).parentId;
+      if (pId !== null && this.nodes.has(pId) && !toDelete.has(pId)) boundaryParents.add(pId);
+    }
+
+    const boundaryEdges = [];
+    for (const pId of boundaryParents) {
+      const oldCh = [...this.nodes.get(pId).children];
+      const newCh = oldCh.filter(ch => !toDelete.has(ch));
+      this.nodes.get(pId).children = [...newCh];
+      boundaryEdges.push([pId, oldCh, newCh]);
+    }
+
+    const detachedNodes = [];
+    for (const nid of toDelete) {
+      detachedNodes.push(this.nodes.get(nid));
+      this.nodes.delete(nid);
+    }
+
+    const afterFocus = [fallbackId, [fallbackId]];
+    const cmd = new SubgraphPatchCmd(
+      `${detachedNodes.length}개 노드 삭제`,
+      false,
+      detachedNodes,
+      boundaryEdges,
+      [],
+      beforeFocus,
+      afterFocus
+    );
+    this._recordCommand(cmd);
+    return [fallbackId, [fallbackId]];
+  }
+
+  pasteNodes(targetParentId, items, beforeFocus) {
+    if (!this.nodes.has(targetParentId) || !items || items.length === 0) {
+      return [beforeFocus[0], [...beforeFocus[1]]];
+    }
+    const targetNode = this.nodes.get(targetParentId);
+    const unfoldedAnc = [];
+    if (targetNode.folded) {
+      unfoldedAnc.push([targetParentId, targetNode.hiddenCount]);
+      targetNode.folded = false;
+      targetNode.hiddenCount = 0;
+    }
+
+    const oldChildren = [...targetNode.children];
+    const idMap = new Map();
+    const createdNodes = [];
+    const newIds = [];
+
+    for (const [origId, relParentId, text] of items) {
+      const actualParentId = (relParentId !== null && idMap.has(relParentId))
+        ? idMap.get(relParentId)
+        : targetParentId;
+      const newId = this._createRawNode(String(text), actualParentId);
+      idMap.set(Number(origId), newId);
+      createdNodes.push(this.nodes.get(newId));
+      newIds.push(newId);
+    }
+
+    const newChildren = [...targetNode.children];
+    const afterFocus = [newIds[0], [...newIds]];
+    const cmd = new SubgraphPatchCmd(
+      `${createdNodes.length}개 노드 붙여넣기`,
+      true,
+      createdNodes,
+      [[targetParentId, oldChildren, newChildren]],
+      unfoldedAnc,
+      beforeFocus,
+      afterFocus
+    );
+    this._recordCommand(cmd);
+    return [newIds[0], newIds];
+  }
+
+  generateBulkNodes(targetParentId, count, beforeFocus) {
+    if (!this.nodes.has(targetParentId)) targetParentId = this.rootId;
+    const targetNode = this.nodes.get(targetParentId);
+    const unfoldedAnc = [];
+    if (targetNode.folded) {
+      unfoldedAnc.push([targetParentId, targetNode.hiddenCount]);
+      targetNode.folded = false;
+      targetNode.hiddenCount = 0;
+    }
+
+    const oldChildren = [...targetNode.children];
+    const frontier = [targetParentId];
+    const createdNodes = [];
+    let lastId = targetParentId;
+
+    for (let i = 0; i < count; i++) {
+      const pId = frontier[Math.floor(Math.random() * frontier.length)];
+      lastId = this._createRawNode(`Node #${this.nextId}`, pId);
+      createdNodes.push(this.nodes.get(lastId));
+      if (frontier.length < 250 || Math.random() < 0.35) frontier.push(lastId);
+    }
+
+    const newChildren = [...targetNode.children];
+    const afterFocus = [lastId, [lastId]];
+    const cmd = new SubgraphPatchCmd(
+      `+${count}개 스트레스 생성`,
+      true,
+      createdNodes,
+      [[targetParentId, oldChildren, newChildren]],
+      unfoldedAnc,
+      beforeFocus,
+      afterFocus
+    );
+    this._recordCommand(cmd);
+    return [lastId, [lastId]];
+  }
+
+  undo() {
+    if (this.undoStack.length === 0) return [null, null, null];
+    const cmd = this.undoStack.pop();
+    const [activeId, selectedIds] = cmd.undo(this);
+    this.redoStack.push(cmd);
+    return [activeId, selectedIds, `실행 취소: ${cmd.label}`];
+  }
+
+  redo() {
+    if (this.redoStack.length === 0) return [null, null, null];
+    const cmd = this.redoStack.pop();
+    const [activeId, selectedIds] = cmd.redo(this);
+    this.undoStack.push(cmd);
+    return [activeId, selectedIds, `다시 실행: ${cmd.label}`];
+  }
+
+  computeLayoutAndBvh(gapX = 68.0, dy = 54.0, halfH = 18.0) {
+    const t0 = performance.now();
+    const order = [];
+    const stack = [[this.rootId, 0]];
+
+    while (stack.length > 0) {
+      const [uId, depth] = stack.pop();
+      order.push(uId);
+      const uNode = this.nodes.get(uId);
+      uNode.depth = depth;
+      if (!uNode.folded && uNode.children.length > 0) {
+        for (let i = uNode.children.length - 1; i >= 0; i--) {
+          stack.push([uNode.children[i], depth + 1]);
+        }
+      }
+    }
+
+    for (let i = order.length - 1; i >= 0; i--) {
+      const uNode = this.nodes.get(order[i]);
+      if (uNode.folded || uNode.children.length === 0) {
+        uNode.span = 1;
+        uNode.visSize = 1;
+      } else {
+        let spanSum = 0, visSum = 1;
+        for (const vId of uNode.children) {
+          const vNode = this.nodes.get(vId);
+          spanSum += vNode.span;
+          visSum += vNode.visSize;
+        }
+        uNode.span = spanSum;
+        uNode.visSize = visSum;
+      }
+    }
+
+    const root = this.nodes.get(this.rootId);
+    root.x = 0.0;
+    const totalHeight = root.span * dy;
+    const yStarts = new Map([[this.rootId, -totalHeight * 0.5]]);
+
+    for (const uId of order) {
+      const uNode = this.nodes.get(uId);
+      const uStart = yStarts.get(uId);
+      const uHeight = uNode.span * dy;
+      uNode.y = Math.round((uStart + uHeight * 0.5) * 10) / 10;
+
+      if (!uNode.folded && uNode.children.length > 0) {
+        const childLeftEdge = uNode.x + uNode.w * 0.5 + gapX;
+        let currY = uStart;
+        for (const vId of uNode.children) {
+          const vNode = this.nodes.get(vId);
+          vNode.x = Math.round((childLeftEdge + vNode.w * 0.5) * 10) / 10;
+          yStarts.set(vId, currY);
+          currY += vNode.span * dy;
+        }
+      }
+    }
+
+    const badgePad = 36.0;
+    for (let i = order.length - 1; i >= 0; i--) {
+      const uNode = this.nodes.get(order[i]);
+      const hw = uNode.w * 0.5;
+      let minX = uNode.x - hw;
+      let maxX = uNode.x + hw + (uNode.children.length > 0 ? badgePad : 0.0);
+      let minY = uNode.y - halfH;
+      let maxY = uNode.y + halfH;
+
+      if (!uNode.folded && uNode.children.length > 0) {
+        for (const vId of uNode.children) {
+          const vNode = this.nodes.get(vId);
+          if (vNode.bMinX < minX) minX = vNode.bMinX;
+          if (vNode.bMaxX > maxX) maxX = vNode.bMaxX;
+          if (vNode.bMinY < minY) minY = vNode.bMinY;
+          if (vNode.bMaxY > maxY) maxY = vNode.bMaxY;
+        }
+      }
+
+      uNode.bMinX = Math.round(minX * 10) / 10;
+      uNode.bMinY = Math.round(minY * 10) / 10;
+      uNode.bMaxX = Math.round(maxX * 10) / 10;
+      uNode.bMaxY = Math.round(maxY * 10) / 10;
+    }
+
+    const elapsedUs = Math.round((performance.now() - t0) * 1000 * 100) / 100;
+    return [elapsedUs, order];
+  }
+
+  getStatePayload(activeId = null, selectedIds = null, actionToast = null) {
+    const [computeTimeUs, preOrder] = this.computeLayoutAndBvh();
+    const visSet = new Set(preOrder);
+
+    if (activeId !== null && !visSet.has(activeId)) {
+      let curr = this.nodes.get(activeId);
+      while (curr && !visSet.has(curr.id) && curr.parentId !== null) {
+        curr = this.nodes.get(curr.parentId);
+      }
+      activeId = curr ? curr.id : this.rootId;
+    }
+
+    const compactNodes = [];
+    for (let idx = 0; idx < preOrder.length; idx++) {
+      const n = this.nodes.get(preOrder[idx]);
+      const badgeCnt = n.folded ? n.hiddenCount : n.children.length;
+      const skipIdx = idx + n.visSize;
+      compactNodes.push([
+        n.id, n.parentId, n.x, n.y, n.w, n.text, n.depth,
+        n.folded ? 1 : 0, badgeCnt,
+        n.bMinX, n.bMinY, n.bMaxX, n.bMaxY, skipIdx
+      ]);
+    }
+
+    return {
+      root_id: this.rootId,
+      active_id: activeId,
+      selected_ids: selectedIds,
+      action_toast: actionToast,
+      nodes: compactNodes,
+      metrics: {
+        total_nodes: this.nodes.size,
+        vis_nodes: preOrder.length,
+        compute_time_us: computeTimeUs,
+        undo_count: this.undoStack.length,
+        redo_count: this.redoStack.length,
+        io_stat: this.lastIoStat
+      }
+    };
+  }
+}
+
+const engine = new MindMapEngine();
+
+// ==========================================
+// 4. IndexedDB + LocalStorage 자동 백업 & GitHub REST API 연동 모듈
+// ==========================================
+const IDB_NAME = 'MindMapCloudDB';
+const IDB_STORE = 'mmap_snapshots';
+const GH_CONFIG_KEY = 'mindmap_gh_config_v1';
+
+function openBackupDB() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) { resolve(null); return; }
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+  });
+}
+
+async function saveAutoBackupNow() {
+  try {
+    const { buffer } = engine.serializeBinary();
+    const kb = (buffer.byteLength / 1024).toFixed(2);
+    const db = await openBackupDB();
+    if (db) {
+      await new Promise((res) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(buffer, 'autosave');
+        tx.oncomplete = () => res();
+        tx.onerror = () => res();
+      });
+    }
+    if (buffer.byteLength < 2500000) {
+      localStorage.setItem('mindmap_quick_mmap', uint8ToBase64(new Uint8Array(buffer)));
+    }
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    engine.lastIoStat = `AutoSaved(${timeStr}): ${kb} KB`;
+    document.getElementById('m-io').textContent = engine.lastIoStat;
+  } catch (err) {
+    // 용량 초과 등 예외 무시
+  }
+}
+
+let autoBackupTimer = null;
+function scheduleAutoBackup() {
+  if (autoBackupTimer) clearTimeout(autoBackupTimer);
+  autoBackupTimer = setTimeout(saveAutoBackupNow, 350);
+}
+
+async function restoreAutoBackupOnLoad() {
+  try {
+    const db = await openBackupDB();
+    let buf = null;
+    if (db) {
+      buf = await new Promise((res) => {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const req = tx.objectStore(IDB_STORE).get('autosave');
+        req.onsuccess = () => res(req.result || null);
+        req.onerror = () => res(null);
+      });
+    }
+    if (!buf) {
+      const b64 = localStorage.getItem('mindmap_quick_mmap');
+      if (b64) buf = base64ToArrayBuffer(b64);
+    }
+    if (buf && buf.byteLength >= 16) {
+      const elapsedUs = engine.deserializeBinary(buf);
+      const kb = (buf.byteLength / 1024).toFixed(2);
+      engine.lastIoStat = `Restored: ${kb} KB (${elapsedUs} µs)`;
+      applyEngineState(engine.getStatePayload(engine.rootId, [engine.rootId], `🔄 이전 작업 자동 복원 완료 (${engine.nodes.size}개 노드)`));
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+// GitHub REST API 연동 관리
+function getGhConfig() {
+  try {
+    const raw = localStorage.getItem(GH_CONFIG_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
+
+function isGhConfigured(cfg) {
+  return Boolean(cfg && cfg.token && cfg.owner && cfg.repo && cfg.path);
+}
+
+function updateGhButtonUI() {
+  const cfg = getGhConfig();
+  const btn = document.getElementById('btn-gh-modal');
+  if (isGhConfigured(cfg)) {
+    btn.classList.add('connected');
+    btn.textContent = `🐙 ${cfg.repo}`;
+  } else {
+    btn.classList.remove('connected');
+    btn.textContent = '🐙 GitHub 설정/동기화';
+  }
+}
+
+function openGhModal() {
+  if (isEditing) exitEditMode(true);
+  const cfg = getGhConfig() || {};
+  document.getElementById('gh-token').value = cfg.token || '';
+  document.getElementById('gh-owner').value = cfg.owner || '';
+  document.getElementById('gh-repo').value = cfg.repo || '';
+  document.getElementById('gh-branch').value = cfg.branch || 'main';
+  document.getElementById('gh-path').value = cfg.path || 'mindmap_data.mmap';
+  document.getElementById('gh-modal-backdrop').classList.add('open');
+}
+
+function closeGhModal() {
+  document.getElementById('gh-modal-backdrop').classList.remove('open');
+}
+
+function setGhStatus(msg, isError = false) {
+  const box = document.getElementById('gh-status-box');
+  box.textContent = msg;
+  box.style.color = isError ? '#fca5a5' : '#4ade80';
+  box.style.borderColor = isError ? '#ef4444' : '#10b981';
+}
+
+function saveGhConfig() {
+  const cfg = {
+    token: document.getElementById('gh-token').value.trim(),
+    owner: document.getElementById('gh-owner').value.trim(),
+    repo: document.getElementById('gh-repo').value.trim(),
+    branch: document.getElementById('gh-branch').value.trim() || 'main',
+    path: document.getElementById('gh-path').value.trim().replace(/^\/+/, '') || 'mindmap_data.mmap'
+  };
+  localStorage.setItem(GH_CONFIG_KEY, JSON.stringify(cfg));
+  updateGhButtonUI();
+  setGhStatus('✅ GitHub 저장소 설정이 브라우저에 저장되었습니다.');
+  showBadgeMessage('🐙 GitHub 설정 저장 완료');
+  return cfg;
+}
+
+function encodeGitHubPath(path) {
+  return path.split('/').map(encodeURIComponent).join('/');
+}
+
+async function pushToGitHub() {
+  const cfg = saveGhConfig();
+  if (!isGhConfigured(cfg)) {
+    setGhStatus('⚠️ Token, Owner, Repository, Path를 모두 입력해 주세요.', true);
+    return;
+  }
+
+  setGhStatus('⏳ GitHub 저장소에 .mmap 바이너리를 커밋하는 중...');
+  showBadgeMessage('⏳ GitHub로 커밋 중...');
+
+  try {
+    const apiBase = `https://api.github.com/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}/contents/${encodeGitHubPath(cfg.path)}`;
+    const headers = {
+      'Authorization': `Bearer ${cfg.token}`,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28'
+    };
+
+    // 1) 기존 파일 SHA 조회 (파일이 이미 존재할 경우 덮어쓰기에 필수)
+    let currentSha = null;
+    const getRes = await fetch(`${apiBase}?ref=${encodeURIComponent(cfg.branch)}&_t=${Date.now()}`, { headers });
+    if (getRes.status === 200) {
+      const meta = await getRes.json();
+      currentSha = meta.sha;
+    } else if (getRes.status !== 404) {
+      const errJson = await getRes.json().catch(() => ({}));
+      throw new Error(errJson.message || `HTTP ${getRes.status}`);
+    }
+
+    // 2) 바이너리 직렬화 및 Base64 변환 후 PUT 커밋
+    const { buffer } = engine.serializeBinary();
+    const b64Content = uint8ToBase64(new Uint8Array(buffer));
+    const kb = (buffer.byteLength / 1024).toFixed(2);
+
+    const putBody = {
+      message: `Update ${cfg.path} (${engine.nodes.size} nodes, ${kb} KB)`,
+      content: b64Content,
+      branch: cfg.branch
+    };
+    if (currentSha) putBody.sha = currentSha;
+
+    const putRes = await fetch(apiBase, {
+      method: 'PUT',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(putBody)
+    });
+
+    if (!putRes.ok) {
+      const errJson = await putRes.json().catch(() => ({}));
+      throw new Error(errJson.message || `커밋 실패 (HTTP ${putRes.status})`);
+    }
+
+    await saveAutoBackupNow();
+    engine.lastIoStat = `GitHub Push: ${kb} KB`;
+    document.getElementById('m-io').textContent = engine.lastIoStat;
+    const msg = `🐙 GitHub 커밋 성공: ${cfg.owner}/${cfg.repo}/${cfg.path} (${kb} KB)`;
+    setGhStatus(msg);
+    showBadgeMessage(msg);
+  } catch (err) {
+    const errMsg = `⚠️ GitHub 커밋 오류: ${err.message}`;
+    setGhStatus(errMsg, true);
+    showBadgeMessage(errMsg);
+  }
+}
+
+async function pullFromGitHub() {
+  const cfg = document.getElementById('gh-modal-backdrop').classList.contains('open')
+    ? saveGhConfig()
+    : getGhConfig();
+
+  if (!isGhConfigured(cfg)) {
+    openGhModal();
+    setGhStatus('⚠️ 먼저 GitHub 저장소 정보를 입력해 주세요.', true);
+    return;
+  }
+
+  setGhStatus('⏳ GitHub 저장소에서 .mmap 데이터를 불러오는 중...');
+  showBadgeMessage('⏳ GitHub에서 불러오는 중...');
+
+  try {
+    const apiBase = `https://api.github.com/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}/contents/${encodeGitHubPath(cfg.path)}`;
+    const res = await fetch(`${apiBase}?ref=${encodeURIComponent(cfg.branch)}&_t=${Date.now()}`, {
+      headers: {
+        'Authorization': `Bearer ${cfg.token}`,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      }
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.message || `파일을 찾을 수 없습니다 (HTTP ${res.status})`);
+    }
+
+    const data = await res.json();
+    if (!data.content) throw new Error('응답에 파일 content가 없습니다.');
+
+    const cleanB64 = data.content.replace(/\s/g, '');
+    const buf = base64ToArrayBuffer(cleanB64);
+    const elapsedUs = engine.deserializeBinary(buf);
+    const kb = (buf.byteLength / 1024).toFixed(2);
+
+    await saveAutoBackupNow();
+    engine.lastIoStat = `GitHub Pull: ${kb} KB (${elapsedUs} µs)`;
+    const msg = `🐙 GitHub 로드 완료: ${engine.nodes.size}개 노드 (${kb} KB)`;
+    setGhStatus(msg);
+    applyEngineState(engine.getStatePayload(engine.rootId, [engine.rootId], msg));
+    closeGhModal();
+  } catch (err) {
+    const errMsg = `⚠️ GitHub 로드 오류: ${err.message}`;
+    setGhStatus(errMsg, true);
+    showBadgeMessage(errMsg);
+  }
+}
+
+async function resetToDefaultMindMap() {
+  engine.initDefaultTree();
+  await saveAutoBackupNow();
+  applyEngineState(engine.getStatePayload(engine.rootId, [engine.rootId], '🔄 기본 마인드맵으로 초기화되었습니다.'));
+  closeGhModal();
+}
+
+// 빠른 저장/로드: GitHub 설정이 있으면 GitHub와 동기화, 없으면 로컬 백업 사용
+async function quickSaveCloudOrLocal() {
+  if (isEditing) exitEditMode(true);
+  await saveAutoBackupNow();
+  const cfg = getGhConfig();
+  if (isGhConfigured(cfg)) {
+    await pushToGitHub();
+  } else {
+    showBadgeMessage(`⚡ 브라우저 로컬 백업 완료 (${engine.nodes.size}개 노드)`);
+  }
+}
+
+async function quickLoadCloudOrLocal() {
+  if (isEditing) exitEditMode(false);
+  cutSet.clear();
+  const cfg = getGhConfig();
+  if (isGhConfigured(cfg)) {
+    await pullFromGitHub();
+  } else {
+    const ok = await restoreAutoBackupOnLoad();
+    if (!ok) showBadgeMessage('⚠️ 저장된 로컬 백업이 없습니다.');
+  }
+}
+
+// ==========================================
+// 5. 렌더러 및 UI 상태 관리
+// ==========================================
+const canvas = document.getElementById('mindmap-canvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+const editorContainer = document.getElementById('editor-container');
+const editor = document.getElementById('inline-editor');
+const filePicker = document.getElementById('file-picker');
+const modeIndicator = document.getElementById('mode-indicator');
+const btnUndo = document.getElementById('btn-undo');
+const btnRedo = document.getElementById('btn-redo');
+const btnBvh = document.getElementById('btn-bvh');
+const btnMultiMode = document.getElementById('btn-multi-mode');
+const btnDpadToggle = document.getElementById('btn-dpad-toggle');
+const dpadPanel = document.getElementById('dpad-panel');
+
+const NODE_H = 36;
+const HALF_H = NODE_H / 2;
+
+let camScale = window.innerWidth < 768 ? 0.85 : 1.0;
+let camTx = window.innerWidth < 768 ? 90 : 180;
+let camTy = window.innerHeight * 0.42;
+
+let nodesList = [];
+let nodeMap = new Map();
+let childrenMap = new Map();
+let depthBuckets = new Map();
+let depthRankMap = new Map();
+
+let cursorId = 1;
+let selectedSet = new Set([1]);
+
+let clipboardMode = null;
+let clipboardItems = [];
+let cutSet = new Set();
+
+let isEditing = false;
+let enterKeyLocked = false;
+let lastEditExitTime = 0;
+
+let mobileMultiSelectMode = false;
+let dpadMode = 'nav';
+
+let showBvhDebug = false;
+let totalServerNodes = 0;
+let toastTimer = null;
+
+let dpr = window.devicePixelRatio || 1;
+let viewW = 0, viewH = 0;
+
+function updateStatusBadge() {
+  if (isEditing) return;
+  const cutInfo = cutSet.size > 0 ? ` | ✂️Cut:${cutSet.size}` : '';
+  const multiLabel = mobileMultiSelectMode ? '☑️다중선택' : '탐색';
+  modeIndicator.textContent = `${multiLabel} (Sel: ${selectedSet.size}${cutInfo})`;
+  modeIndicator.classList.toggle('multi', mobileMultiSelectMode);
+}
+
+function showBadgeMessage(msg) {
+  if (toastTimer) clearTimeout(toastTimer);
+  const isWarn = msg.includes('⚠️') || msg.includes('오류') || msg.includes('루트');
+  modeIndicator.textContent = msg;
+  modeIndicator.classList.toggle('warn', isWarn);
+  toastTimer = setTimeout(() => {
+    modeIndicator.classList.remove('warn');
+    updateStatusBadge();
+  }, 2400);
+}
+
+function toggleMobileMultiSelect() {
+  mobileMultiSelectMode = !mobileMultiSelectMode;
+  btnMultiMode.classList.toggle('active-toggle', mobileMultiSelectMode);
+  updateStatusBadge();
+  showBadgeMessage(mobileMultiSelectMode ? '☑️ 다중 선택 모드 활성화' : '단일 선택 모드로 전환');
+}
+
+function toggleDpadPanel() {
+  const isOpen = dpadPanel.classList.toggle('open');
+  btnDpadToggle.classList.toggle('active-toggle', isOpen);
+}
+
+function setDpadMode(mode) {
+  dpadMode = mode;
+  document.getElementById('dpad-mode-nav').classList.toggle('active', mode === 'nav');
+  const structBtn = document.getElementById('dpad-mode-struct');
+  structBtn.classList.toggle('active', mode === 'struct');
+  structBtn.classList.toggle('struct-mode', mode === 'struct');
+  document.getElementById('dpad-title').textContent =
+    mode === 'nav' ? '🧭 포커스 방향 탐색' : '⚡ 계층·순서 이동 (Alt)';
+}
+
+function handleDpadArrow(arrowKey) {
+  if (dpadMode === 'struct') stepStructuralMove(arrowKey);
+  else navigateDirection(arrowKey, mobileMultiSelectMode, false);
+}
+
+function zoomStep(factor) {
+  const cx = viewW * 0.5, cy = viewH * 0.5;
+  const newScale = Math.min(Math.max(camScale * factor, 0.08), 4.0);
+  const ratio = newScale / camScale;
+  camTx = cx - (cx - camTx) * ratio;
+  camTy = cy - (cy - camTy) * ratio;
+  camScale = newScale;
+  if (isEditing) syncEditorPosition();
+  requestRender();
+}
+
+function centerOnCursor() {
+  const n = nodeMap.get(cursorId) || nodeMap.get(1);
+  if (!n) return;
+  camTx = viewW * 0.35 - n[2] * camScale;
+  camTy = viewH * 0.45 - n[3] * camScale;
+  if (isEditing) syncEditorPosition();
+  requestRender();
+}
+
+function toggleBvhDebug() {
+  showBvhDebug = !showBvhDebug;
+  btnBvh.classList.toggle('active', showBvhDebug);
+  requestRender();
+}
+
+function resizeCanvas() {
+  dpr = window.devicePixelRatio || 1;
+  viewW = canvas.parentElement.clientWidth;
+  viewH = canvas.parentElement.clientHeight;
+  canvas.width = Math.floor(viewW * dpr);
+  canvas.height = Math.floor(viewH * dpr);
+  if (isEditing) syncEditorPosition();
+  requestRender();
+}
+window.addEventListener('resize', resizeCanvas);
+
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    if (!isEditing) return;
+    const n = nodeMap.get(cursorId);
+    if (!n) return;
+    const vvH = window.visualViewport.height;
+    const headerH = document.querySelector('header').offsetHeight || 50;
+    const availH = vvH - headerH;
+    const targetScreenY = Math.max(80, availH * 0.38);
+    camTy = targetScreenY - n[3] * camScale;
+    syncEditorPosition();
+    requestRender();
+  });
+}
+
+// ==========================================
+// 6. 로컬 .mmap 파일 다운로드/업로드
+// ==========================================
+async function saveFileWithDialog() {
+  if (isEditing) exitEditMode(true);
+  const { buffer, elapsedUs } = engine.serializeBinary();
+  const kb = (buffer.byteLength / 1024).toFixed(2);
+
+  if (typeof window.showSaveFilePicker === 'function') {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: 'mindmap.mmap',
+        types: [{
+          description: 'MindMap Binary File (.mmap)',
+          accept: { 'application/octet-stream': ['.mmap'] }
+        }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(buffer);
+      await writable.close();
+      engine.lastIoStat = `Saved(${handle.name}): ${kb} KB`;
+      document.getElementById('m-io').textContent = engine.lastIoStat;
+      showBadgeMessage(`💾 저장 완료: ${handle.name} (${kb} KB)`);
+      return;
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+    }
+  }
+
+  const blob = new Blob([buffer], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'mindmap.mmap';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  engine.lastIoStat = `Saved: ${kb} KB (${elapsedUs} µs)`;
+  document.getElementById('m-io').textContent = engine.lastIoStat;
+  showBadgeMessage(`💾 .mmap 다운로드 완료 (${kb} KB)`);
+}
+
+async function openFileWithDialog() {
+  if (isEditing) exitEditMode(false);
+  cutSet.clear();
+
+  if (typeof window.showOpenFilePicker === 'function') {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{
+          description: 'MindMap Binary File (.mmap)',
+          accept: { 'application/octet-stream': ['.mmap'] }
+        }],
+        multiple: false
+      });
+      const file = await handle.getFile();
+      await loadBinaryBlob(file);
+      return;
+    } catch (err) {
+      return;
+    }
+  }
+  filePicker.click();
+}
+
+async function uploadBinaryFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  await loadBinaryBlob(file);
+  event.target.value = '';
+}
+
+async function loadBinaryBlob(fileOrBlob) {
+  try {
+    const buf = await fileOrBlob.arrayBuffer();
+    const elapsedUs = engine.deserializeBinary(buf);
+    const kb = (buf.byteLength / 1024).toFixed(2);
+    await saveAutoBackupNow();
+    engine.lastIoStat = `Opened: ${kb} KB (${engine.nodes.size} nodes)`;
+    const toast = `📂 열기 완료 (${engine.nodes.size}개 노드, ${elapsedUs} µs)`;
+    applyEngineState(engine.getStatePayload(engine.rootId, [engine.rootId], toast));
+  } catch (err) {
+    showBadgeMessage(`⚠️ 파일 열기 실패: ${err.message}`);
+  }
+}
+
+function uint8ToBase64(uint8) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < uint8.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, uint8.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function base64ToArrayBuffer(b64) {
+  const binary = atob(b64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+window.addEventListener('dragover', (e) => { e.preventDefault(); });
+window.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    await loadBinaryBlob(e.dataTransfer.files[0]);
+  }
+});
+
+// ==========================================
+// 7. 공간 인덱스 및 방향 탐색
+// ==========================================
+function rebuildSpatialIndex() {
+  nodeMap.clear();
+  childrenMap.clear();
+  depthBuckets.clear();
+  depthRankMap.clear();
+
+  for (let i = 0, len = nodesList.length; i < len; i++) {
+    const n = nodesList[i];
+    const id = n[0], pId = n[1], depth = n[6];
+    nodeMap.set(id, n);
+
+    if (pId !== null) {
+      let ch = childrenMap.get(pId);
+      if (!ch) { ch = []; childrenMap.set(pId, ch); }
+      ch.push(n);
+    }
+
+    let bucket = depthBuckets.get(depth);
+    if (!bucket) { bucket = []; depthBuckets.set(depth, bucket); }
+    depthRankMap.set(id, bucket.length);
+    bucket.push(n);
+  }
+}
+
+function findClosestNodeInBucket(bucket, targetY) {
+  if (!bucket || bucket.length === 0) return null;
+  let lo = 0, hi = bucket.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (bucket[mid][3] < targetY) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  if (lo >= bucket.length) return bucket[bucket.length - 1];
+  if (lo === 0) return bucket[0];
+  const prev = bucket[lo - 1], curr = bucket[lo];
+  return Math.abs(prev[3] - targetY) <= Math.abs(curr[3] - targetY) ? prev : curr;
+}
+
+function navigateDirection(key, isShift, isCmdOrCtrl) {
+  const curr = nodeMap.get(cursorId);
+  if (!curr) return;
+
+  const id = curr[0], pId = curr[1], curY = curr[3], depth = curr[6], isFolded = curr[7] === 1;
+  let targetNode = null;
+
+  if (key === 'ArrowLeft') {
+    if (pId !== null && nodeMap.has(pId)) targetNode = nodeMap.get(pId);
+  } else if (key === 'ArrowRight') {
+    if (isFolded) {
+      dispatchAction('fold', { nodeIds: [id], forceUnfold: true });
+      return;
+    }
+    const children = childrenMap.get(id);
+    if (children && children.length > 0) {
+      targetNode = findClosestNodeInBucket(children, curY);
+    } else {
+      targetNode = findClosestNodeInBucket(depthBuckets.get(depth + 1), curY);
+    }
+  } else if (key === 'ArrowUp' || key === 'ArrowDown') {
+    const bucket = depthBuckets.get(depth);
+    const rank = depthRankMap.get(id);
+    if (bucket && rank !== undefined) {
+      const nextRank = key === 'ArrowUp' ? rank - 1 : rank + 1;
+      if (nextRank >= 0 && nextRank < bucket.length) targetNode = bucket[nextRank];
+    }
+  }
+
+  if (!targetNode) return;
+  const nextId = targetNode[0];
+
+  if (isShift) {
+    selectedSet.add(cursorId);
+    selectedSet.add(nextId);
+    cursorId = nextId;
+  } else if (isCmdOrCtrl) {
+    cursorId = nextId;
+  } else {
+    cursorId = nextId;
+    selectedSet.clear();
+    selectedSet.add(nextId);
+  }
+
+  updateStatusBadge();
+  ensureNodeInViewport(targetNode);
+  requestRender();
+}
+
+function toggleCursorNodeSelection() {
+  if (selectedSet.has(cursorId)) {
+    if (selectedSet.size > 1) selectedSet.delete(cursorId);
+  } else {
+    selectedSet.add(cursorId);
+  }
+  updateStatusBadge();
+  requestRender();
+}
+
+function ensureNodeInViewport(node) {
+  if (!node) return;
+  const halfW = node[4] * 0.5;
+  const marginX = Math.min(80, viewW * 0.18);
+  const topMargin = 60;
+  const bottomMargin = 95;
+  const sx = node[2] * camScale + camTx;
+  const sy = node[3] * camScale + camTy;
+
+  if (sx - halfW * camScale < marginX) camTx = marginX + halfW * camScale - node[2] * camScale;
+  else if (sx + halfW * camScale > viewW - marginX) camTx = (viewW - marginX) - halfW * camScale - node[2] * camScale;
+
+  if (sy - HALF_H * camScale < topMargin) camTy = topMargin + HALF_H * camScale - node[3] * camScale;
+  else if (sy + HALF_H * camScale > viewH - bottomMargin) camTy = (viewH - bottomMargin) - HALF_H * camScale - node[3] * camScale;
+}
+
+// ==========================================
+// 8. 선형 BVH O(log N) 렌더러 & Hit-Test
+// ==========================================
+let renderPending = false;
+function requestRender() {
+  if (!renderPending) {
+    renderPending = true;
+    requestAnimationFrame(drawFrame);
+  }
+}
+
+function drawFrame() {
+  renderPending = false;
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#0b0f19';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const vMinX = -camTx / camScale;
+  const vMaxX = (viewW - camTx) / camScale;
+  const vMinY = -camTy / camScale;
+  const vMaxY = (viewH - camTy) / camScale;
+
+  ctx.setTransform(camScale * dpr, 0, 0, camScale * dpr, camTx * dpr, camTy * dpr);
+
+  const len = nodesList.length;
+  let visibleNodes = 0;
+  let bvhChecks = 0;
+  let skippedNodes = 0;
+
+  const visibleIndices = [];
+  ctx.beginPath();
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 1.8;
+
+  let i = 0;
+  while (i < len) {
+    const n = nodesList[i];
+    bvhChecks++;
+
+    const bMinX = n[9], bMinY = n[10], bMaxX = n[11], bMaxY = n[12];
+    const skipIdx = n[13];
+
+    if (bMaxX < vMinX || bMinX > vMaxX || bMaxY < vMinY || bMinY > vMaxY) {
+      skippedNodes += (skipIdx - i);
+      i = skipIdx;
+      continue;
+    }
+
+    const pId = n[1];
+    if (pId !== null) {
+      const p = nodeMap.get(pId);
+      if (p) {
+        const x1 = p[2] + p[4] * 0.5, y1 = p[3];
+        const x2 = n[2] - n[4] * 0.5, y2 = n[3];
+        const eMinX = x1 < x2 ? x1 : x2, eMaxX = x1 > x2 ? x1 : x2;
+        const eMinY = y1 < y2 ? y1 : y2, eMaxY = y1 > y2 ? y1 : y2;
+
+        if (eMaxX >= vMinX && eMinX <= vMaxX && eMaxY >= vMinY && eMinY <= vMaxY) {
+          const xm = (x1 + x2) * 0.5;
+          ctx.moveTo(x1, y1);
+          ctx.bezierCurveTo(xm, y1, xm, y2, x2, y2);
+        }
+      }
+    }
+
+    const nx = n[2], ny = n[3], halfW = n[4] * 0.5;
+    if (nx + halfW + 42 >= vMinX && nx - halfW <= vMaxX && ny + HALF_H >= vMinY && ny - HALF_H <= vMaxY) {
+      visibleIndices.push(i);
+    }
+    i++;
+  }
+  ctx.stroke();
+
+  if (showBvhDebug) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(16, 185, 129, 0.38)';
+    ctx.lineWidth = 1.2 / camScale;
+    ctx.setLineDash([6 / camScale, 4 / camScale]);
+    for (let k = 0; k < visibleIndices.length; k++) {
+      const n = nodesList[visibleIndices[k]];
+      if (n[13] - visibleIndices[k] > 1) {
+        ctx.strokeRect(n[9], n[10], n[11] - n[9], n[12] - n[10]);
+      }
+    }
+    ctx.restore();
+  }
+
+  const drawText = camScale >= 0.35;
+  if (drawText) {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+  }
+
+  visibleNodes = visibleIndices.length;
+  for (let k = 0; k < visibleNodes; k++) {
+    const n = nodesList[visibleIndices[k]];
+    const id = n[0], nx = n[2], ny = n[3], nw = n[4];
+    const isFolded = n[7] === 1, badgeCnt = n[8];
+    const halfW = nw * 0.5;
+    const isSel = selectedSet.has(id);
+    const isCur = (id === cursorId);
+    const isCut = cutSet.has(id);
+
+    ctx.save();
+    if (isCut) {
+      ctx.globalAlpha = 0.55;
+      ctx.setLineDash([6, 4]);
+    }
+
+    ctx.fillStyle = isSel ? '#1e293b' : '#111827';
+    ctx.strokeStyle = isCut ? '#f43f5e' : (isSel ? '#38bdf8' : (isFolded ? '#f59e0b' : '#475569'));
+    ctx.lineWidth = (isSel || isCut) ? 2.6 : 1.6;
+
+    ctx.beginPath();
+    ctx.roundRect(nx - halfW, ny - HALF_H, nw, NODE_H, 7);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    if (isCur) {
+      ctx.save();
+      ctx.strokeStyle = isSel ? '#facc15' : '#c084fc';
+      ctx.lineWidth = 2.0;
+      ctx.setLineDash([5, 3]);
+      ctx.beginPath();
+      ctx.roundRect(nx - halfW - 4, ny - HALF_H - 4, nw + 8, NODE_H + 8, 9);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (drawText && !(isEditing && isCur)) {
+      ctx.font = '500 13px system-ui, -apple-system, sans-serif';
+      ctx.fillStyle = isCut ? '#fda4af' : (isSel ? '#38bdf8' : '#f1f5f9');
+      ctx.fillText(n[5], nx, ny);
+    }
+
+    if (badgeCnt > 0) {
+      const bx = nx + halfW + 14;
+      const by = ny;
+      if (isFolded) {
+        const label = `+${badgeCnt}`;
+        const pillW = Math.max(24, label.length * 7 + 10);
+        ctx.fillStyle = '#d97706';
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(bx - 8, by - 10, pillW, 20, 10);
+        ctx.fill();
+        ctx.stroke();
+        if (drawText) {
+          ctx.font = '700 11px monospace';
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(label, bx - 8 + pillW * 0.5, by);
+        }
+      } else if (camScale >= 0.45) {
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(bx, by, 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(bx - 4, by);
+        ctx.lineTo(bx + 4, by);
+        ctx.stroke();
+      }
+    }
+  }
+
+  document.getElementById('m-cull').textContent = `Draw: ${visibleNodes}/${len}`;
+  document.getElementById('m-bvh').textContent = `BVH: ${bvhChecks} (Skip ${skippedNodes})`;
+}
+
+function hitTestWithBVH(wx, wy, isTouch = false) {
+  const pad = isTouch ? 8 / camScale : 0;
+  const len = nodesList.length;
+  let i = 0;
+  while (i < len) {
+    const n = nodesList[i];
+    if (wx < n[9] - pad || wx > n[11] + pad || wy < n[10] - pad || wy > n[12] + pad) {
+      i = n[13];
+      continue;
+    }
+    const nx = n[2], ny = n[3], halfW = n[4] * 0.5, badgeCnt = n[8];
+    if (badgeCnt > 0) {
+      const bx = nx + halfW + 14;
+      if (wx >= bx - 14 - pad && wx <= bx + 34 + pad && wy >= ny - 14 - pad && wy <= ny + 14 + pad) {
+        return { type: 'fold_badge', node: n };
+      }
+    }
+    if (wx >= nx - halfW - pad && wx <= nx + halfW + pad && wy >= ny - HALF_H - pad && wy <= ny + HALF_H + pad) {
+      return { type: 'node', node: n };
+    }
+    i++;
+  }
+  return null;
+}
+
+// ==========================================
+// 9. 로컬 엔진 액션 디스패처 (자동 백업 트리거 포함)
+// ==========================================
+function applyEngineState(data, actionType = '') {
+  nodesList = data.nodes;
+  totalServerNodes = data.metrics.total_nodes;
+  rebuildSpatialIndex();
+
+  if (actionType === 'reparent' && (!data.action_toast || !data.action_toast.includes('⚠️'))) {
+    cutSet.clear();
+    clipboardMode = null;
+  }
+
+  if (data.selected_ids && data.selected_ids.length > 0) {
+    const validIds = data.selected_ids.filter(id => nodeMap.has(id));
+    selectedSet = new Set(validIds.length > 0 ? validIds : [data.root_id]);
+  }
+
+  if (data.active_id && nodeMap.has(data.active_id)) {
+    cursorId = data.active_id;
+    if (!data.selected_ids) {
+      selectedSet.clear();
+      selectedSet.add(cursorId);
+    }
+    ensureNodeInViewport(nodeMap.get(cursorId));
+  }
+
+  if (data.action_toast) showBadgeMessage(data.action_toast);
+  else updateStatusBadge();
+
+  btnUndo.textContent = `↩ Undo (${data.metrics.undo_count})`;
+  btnUndo.disabled = data.metrics.undo_count === 0;
+  btnRedo.textContent = `↪ Redo (${data.metrics.redo_count})`;
+  btnRedo.disabled = data.metrics.redo_count === 0;
+
+  document.getElementById('m-io').textContent = data.metrics.io_stat;
+  document.getElementById('m-py-time').textContent = `Layout: ${data.metrics.compute_time_us} µs`;
+  document.getElementById('m-py-mem').textContent = `Nodes: ${data.metrics.total_nodes}`;
+
+  requestRender();
+}
+
+function dispatchAction(type, payload = {}) {
+  const beforeFocus = [cursorId, Array.from(selectedSet)];
+  let activeId = null, selectedIds = null, toast = null;
+
+  if (type === 'add') {
+    [activeId, selectedIds] = engine.addNode(payload.text, payload.parentId, payload.afterSiblingId ?? null, beforeFocus);
+  } else if (type === 'rename') {
+    [activeId, selectedIds] = engine.updateText(payload.nodeId, payload.text, beforeFocus);
+  } else if (type === 'fold') {
+    [activeId, selectedIds, toast] = engine.toggleFoldBatch(payload.nodeIds, payload.forceUnfold, beforeFocus);
+  } else if (type === 'reparent') {
+    [activeId, selectedIds, toast] = engine.reparentNodes(payload.movingIds, payload.targetParentId, null, beforeFocus);
+  } else if (type === 'step_move') {
+    [activeId, selectedIds, toast] = engine.structuralStepMove(payload.direction, cursorId, Array.from(selectedSet), beforeFocus);
+  } else if (type === 'delete_batch') {
+    [activeId, selectedIds] = engine.deleteNodesBatch(payload.nodeIds, beforeFocus);
+  } else if (type === 'paste') {
+    [activeId, selectedIds] = engine.pasteNodes(payload.targetParentId, payload.items, beforeFocus);
+  } else if (type === 'stress') {
+    [activeId, selectedIds] = engine.generateBulkNodes(payload.parentId, payload.count, beforeFocus);
+  } else if (type === 'undo') {
+    [activeId, selectedIds, toast] = engine.undo();
+  } else if (type === 'redo') {
+    [activeId, selectedIds, toast] = engine.redo();
+  }
+
+  applyEngineState(engine.getStatePayload(activeId, selectedIds, toast), type);
+  scheduleAutoBackup();
+}
+
+// ==========================================
+// 10. 편집, 클립보드, 액션 함수
+// ==========================================
+function cutSelectedNodes() {
+  if (isEditing) exitEditMode(true);
+  const targets = Array.from(selectedSet).filter(id => id !== 1);
+  if (targets.length === 0) {
+    showBadgeMessage('⚠️ 루트 노드는 잘라낼 수 없습니다.');
+    return;
+  }
+  clipboardMode = 'cut';
+  cutSet = new Set(targets);
+  clipboardItems = [];
+  showBadgeMessage(`✂️ ${cutSet.size}개 이동 준비 완료 (대상 부모 선택 후 붙여넣기)`);
+  requestRender();
+}
+
+function copySelectedNodes(includeSubtrees = false) {
+  if (isEditing) exitEditMode(true);
+  if (selectedSet.size === 0) selectedSet.add(cursorId);
+  const effectiveSet = new Set(selectedSet);
+
+  if (includeSubtrees) {
+    for (let i = 0; i < nodesList.length; i++) {
+      const n = nodesList[i];
+      if (n[1] !== null && effectiveSet.has(n[1])) effectiveSet.add(n[0]);
+    }
+  }
+
+  clipboardMode = 'copy';
+  cutSet.clear();
+  clipboardItems = [];
+
+  for (let i = 0; i < nodesList.length; i++) {
+    const n = nodesList[i];
+    if (!effectiveSet.has(n[0])) continue;
+    let ancId = n[1];
+    while (ancId !== null && !effectiveSet.has(ancId)) {
+      const ancNode = nodeMap.get(ancId);
+      ancId = ancNode ? ancNode[1] : null;
+    }
+    clipboardItems.push([n[0], ancId, n[5]]);
+  }
+  showBadgeMessage(`📋 복사 완료 (${clipboardItems.length}개)`);
+  requestRender();
+}
+
+function pasteOrMoveNodes() {
+  if (isEditing) exitEditMode(true);
+  if (clipboardMode === 'cut' && cutSet.size > 0) {
+    dispatchAction('reparent', { movingIds: Array.from(cutSet), targetParentId: cursorId });
+  } else if (clipboardMode === 'copy' && clipboardItems.length > 0) {
+    dispatchAction('paste', { targetParentId: cursorId, items: clipboardItems });
+  } else {
+    showBadgeMessage('⚠️ 먼저 잘라내기(✂️) 또는 복사(📋)를 실행하세요.');
+  }
+}
+
+function stepStructuralMove(dirKey) {
+  if (isEditing) exitEditMode(true);
+  const dirMap = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+  const direction = dirMap[dirKey];
+  if (direction) dispatchAction('step_move', { direction });
+}
+
+function syncEditorPosition() {
+  const n = nodeMap.get(cursorId);
+  if (!n) return;
+  const dynamicW = Math.max(n[4], calcNodeWidth(editor.value) + 12);
+  const sx = (n[2] - n[4] * 0.5) * camScale + camTx;
+  const sy = (n[3] - HALF_H) * camScale + camTy;
+
+  editor.style.width = `${dynamicW}px`;
+  editor.style.height = `${NODE_H}px`;
+  editorContainer.style.left = `${sx}px`;
+  editorContainer.style.top = `${sy}px`;
+  editorContainer.style.transform = `scale(${camScale})`;
+}
+
+editor.addEventListener('input', () => { if (isEditing) syncEditorPosition(); });
+editor.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Enter') { e.preventDefault(); exitEditMode(true); }
+  else if (e.key === 'Escape') { e.preventDefault(); exitEditMode(false); }
+});
+
+function enterEditMode() {
+  const n = nodeMap.get(cursorId);
+  if (!n) return;
+  ensureNodeInViewport(n);
+  requestRender();
+
+  isEditing = true;
+  modeIndicator.textContent = '편집 모드 (✓ 또는 Enter 완료)';
+  modeIndicator.classList.add('editing');
+
+  editor.value = n[5];
+  editorContainer.style.display = 'flex';
+  syncEditorPosition();
+  editor.focus();
+  editor.select();
+}
+
+function exitEditMode(commit = true) {
+  if (!isEditing) return;
+  isEditing = false;
+  enterKeyLocked = true;
+  lastEditExitTime = performance.now();
+
+  editor.blur();
+  const newText = editor.value.trim();
+  editorContainer.style.display = 'none';
+
+  modeIndicator.classList.remove('editing');
+  updateStatusBadge();
+
+  const n = nodeMap.get(cursorId);
+  if (commit && n && newText && newText !== n[5]) {
+    dispatchAction('rename', { nodeId: cursorId, text: newText });
+  } else {
+    requestRender();
+  }
+}
+
+function toggleFoldSelected() {
+  if (isEditing) exitEditMode(true);
+  const targets = selectedSet.size > 0 ? Array.from(selectedSet) : [cursorId];
+  dispatchAction('fold', { nodeIds: targets, forceUnfold: false });
+}
+
+function triggerUndo() { if (isEditing) exitEditMode(false); dispatchAction('undo'); }
+function triggerRedo() { if (isEditing) exitEditMode(false); dispatchAction('redo'); }
+
+function createChildNode() {
+  if (isEditing) exitEditMode(true);
+  dispatchAction('add', { parentId: cursorId, text: `새 노드 #${totalServerNodes + 1}` });
+}
+
+function createSiblingNode() {
+  if (isEditing) exitEditMode(true);
+  const curr = nodeMap.get(cursorId);
+  if (!curr) return;
+  const parentId = curr[1] !== null ? curr[1] : curr[0];
+  const afterSiblingId = curr[1] !== null ? curr[0] : null;
+  dispatchAction('add', { parentId, afterSiblingId, text: `형제 노드 #${totalServerNodes + 1}` });
+}
+
+function deleteSelected() {
+  if (isEditing) exitEditMode(false);
+  const targets = Array.from(selectedSet).filter(id => id !== 1);
+  if (targets.length === 0) {
+    showBadgeMessage('⚠️ 루트 노드는 삭제할 수 없습니다.');
+    return;
+  }
+  dispatchAction('delete_batch', { nodeIds: targets });
+}
+
+function stressTest() {
+  if (isEditing) exitEditMode(false);
+  dispatchAction('stress', { parentId: cursorId, count: 1000 });
+}
+
+// ==========================================
+// 11. 데스크톱 키보드 & 마우스 인터랙션
+// ==========================================
+let shiftTapCandidate = false;
+window.addEventListener('keydown', (e) => {
+  if (document.getElementById('gh-modal-backdrop').classList.contains('open')) {
+    if (e.key === 'Escape') closeGhModal();
+    return;
+  }
+  if (e.key === 'Shift') { shiftTapCandidate = true; return; }
+  shiftTapCandidate = false;
+  if (isEditing || e.target === editor) return;
+
+  if (e.key === 'Enter' && (enterKeyLocked || (performance.now() - lastEditExitTime < 150))) {
+    e.preventDefault();
+    return;
+  }
+
+  const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+
+  if ((isCmdOrCtrl && e.shiftKey && e.code === 'KeyS') || (e.altKey && !isCmdOrCtrl && e.code === 'KeyS')) {
+    e.preventDefault(); quickSaveCloudOrLocal(); return;
+  }
+  if ((isCmdOrCtrl && e.shiftKey && e.code === 'KeyO') || (e.altKey && !isCmdOrCtrl && e.code === 'KeyO')) {
+    e.preventDefault(); quickLoadCloudOrLocal(); return;
+  }
+  if (isCmdOrCtrl && !e.shiftKey && e.code === 'KeyS') {
+    e.preventDefault(); saveFileWithDialog(); return;
+  }
+  if (isCmdOrCtrl && !e.shiftKey && e.code === 'KeyO') {
+    e.preventDefault(); openFileWithDialog(); return;
+  }
+  if (isCmdOrCtrl && e.code === 'KeyZ') {
+    e.preventDefault(); if (e.shiftKey) triggerRedo(); else triggerUndo(); return;
+  }
+  if (isCmdOrCtrl && e.code === 'KeyY') {
+    e.preventDefault(); triggerRedo(); return;
+  }
+
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+    e.preventDefault();
+    if (e.altKey && !isCmdOrCtrl) stepStructuralMove(e.key);
+    else navigateDirection(e.key, e.shiftKey, isCmdOrCtrl);
+    return;
+  }
+
+  if (isCmdOrCtrl && e.code === 'KeyX') { e.preventDefault(); cutSelectedNodes(); return; }
+  if (isCmdOrCtrl && e.code === 'KeyC') { e.preventDefault(); copySelectedNodes(e.shiftKey); return; }
+  if (isCmdOrCtrl && e.code === 'KeyV') { e.preventDefault(); pasteOrMoveNodes(); return; }
+  if (isCmdOrCtrl && e.code === 'KeyA') {
+    e.preventDefault(); nodesList.forEach(n => selectedSet.add(n[0])); updateStatusBadge(); requestRender(); return;
+  }
+
+  if (!isCmdOrCtrl && (e.code === 'KeyF' || e.key === '/')) { e.preventDefault(); toggleFoldSelected(); return; }
+  if (!isCmdOrCtrl && e.code === 'KeyB') { e.preventDefault(); toggleBvhDebug(); return; }
+  if ((isCmdOrCtrl && e.key === 'Enter') || e.key === 'Tab') { e.preventDefault(); toggleCursorNodeSelection(); return; }
+
+  if (e.code === 'Space') { e.preventDefault(); enterEditMode(); }
+  else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); createSiblingNode(); }
+  else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); createChildNode(); }
+  else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); }
+  else if (e.key === 'Escape') {
+    e.preventDefault();
+    cutSet.clear(); selectedSet.clear(); selectedSet.add(cursorId);
+    mobileMultiSelectMode = false;
+    btnMultiMode.classList.remove('active-toggle');
+    showBadgeMessage('선택 및 잘라내기 대기 해제');
+    requestRender();
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  if (e.key === 'Enter') enterKeyLocked = false;
+  if (e.key === 'Shift' && shiftTapCandidate && !isEditing) {
+    shiftTapCandidate = false;
+    toggleCursorNodeSelection();
+  }
+});
+
+let isDragging = false, dragMoved = false, startX = 0, startY = 0;
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  if (isEditing) exitEditMode(true);
+  isDragging = true; dragMoved = false;
+  startX = e.clientX - camTx; startY = e.clientY - camTy;
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  const nx = e.clientX - startX, ny = e.clientY - startY;
+  if (Math.abs(nx - camTx) > 3 || Math.abs(ny - camTy) > 3) dragMoved = true;
+  camTx = nx; camTy = ny;
+  if (isEditing) syncEditorPosition();
+  requestRender();
+});
+
+window.addEventListener('mouseup', (e) => {
+  if (!isDragging) return;
+  isDragging = false;
+
+  if (!dragMoved && e.target === canvas) {
+    const rect = canvas.getBoundingClientRect();
+    const wx = (e.clientX - rect.left - camTx) / camScale;
+    const wy = (e.clientY - rect.top - camTy) / camScale;
+
+    const hit = hitTestWithBVH(wx, wy, false);
+    if (!hit) return;
+
+    const clickedId = hit.node[0];
+    if (hit.type === 'fold_badge') {
+      dispatchAction('fold', { nodeIds: [clickedId], forceUnfold: false });
+    } else {
+      if (e.metaKey || e.ctrlKey || mobileMultiSelectMode) {
+        cursorId = clickedId;
+        toggleCursorNodeSelection();
+      } else if (e.shiftKey) {
+        cursorId = clickedId;
+        selectedSet.add(clickedId);
+        updateStatusBadge();
+        requestRender();
+      } else {
+        cursorId = clickedId;
+        selectedSet.clear();
+        selectedSet.add(clickedId);
+        updateStatusBadge();
+        requestRender();
+      }
+    }
+  }
+});
+
+canvas.addEventListener('dblclick', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const wx = (e.clientX - rect.left - camTx) / camScale;
+  const wy = (e.clientY - rect.top - camTy) / camScale;
+  const hit = hitTestWithBVH(wx, wy, false);
+  if (hit && hit.type === 'node') {
+    cursorId = hit.node[0];
+    selectedSet.clear();
+    selectedSet.add(cursorId);
+    enterEditMode();
+  }
+});
+
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+
+  const zoomFactor = Math.exp(-e.deltaY * 0.0015);
+  const newScale = Math.min(Math.max(camScale * zoomFactor, 0.08), 4.0);
+  const scaleRatio = newScale / camScale;
+
+  camTx = mx - (mx - camTx) * scaleRatio;
+  camTy = my - (my - camTy) * scaleRatio;
+  camScale = newScale;
+
+  if (isEditing) syncEditorPosition();
+  requestRender();
+}, { passive: false });
+
+// ==========================================
+// 12. 모바일 멀티터치 제어 엔진
+// ==========================================
+let touchMode = 'none';
+let touchStartX = 0, touchStartY = 0;
+let touchPanBaseTx = 0, touchPanBaseTy = 0;
+let touchMoved = false;
+let longPressTimer = null;
+let longPressTriggered = false;
+
+let lastTapTime = 0;
+let lastTapNodeId = null;
+
+let pinchInitDist = 0;
+let pinchInitScale = 1.0;
+let pinchMidWorldX = 0;
+let pinchMidWorldY = 0;
+
+function clearLongPress() {
+  if (longPressTimer) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+}
+
+function getTouchDistance(t1, t2) {
+  return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+}
+
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+
+  if (e.touches.length === 1) {
+    const t = e.touches[0];
+    touchMode = 'single';
+    touchMoved = false;
+    longPressTriggered = false;
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+    touchPanBaseTx = camTx;
+    touchPanBaseTy = camTy;
+
+    clearLongPress();
+    longPressTimer = setTimeout(() => {
+      if (touchMode === 'single' && !touchMoved) {
+        const wx = (t.clientX - rect.left - camTx) / camScale;
+        const wy = (t.clientY - rect.top - camTy) / camScale;
+        const hit = hitTestWithBVH(wx, wy, true);
+        if (hit && hit.type === 'node') {
+          longPressTriggered = true;
+          cursorId = hit.node[0];
+          toggleCursorNodeSelection();
+          if (navigator.vibrate) navigator.vibrate(35);
+          showBadgeMessage(`☑️ 롱프레스 다중 선택 (Sel: ${selectedSet.size}개)`);
+        }
+      }
+    }, 450);
+
+  } else if (e.touches.length >= 2) {
+    clearLongPress();
+    touchMode = 'pinch';
+    touchMoved = true;
+    const t1 = e.touches[0], t2 = e.touches[1];
+    pinchInitDist = Math.max(10, getTouchDistance(t1, t2));
+    pinchInitScale = camScale;
+
+    const midX = (t1.clientX + t2.clientX) * 0.5 - rect.left;
+    const midY = (t1.clientY + t2.clientY) * 0.5 - rect.top;
+    pinchMidWorldX = (midX - camTx) / camScale;
+    pinchMidWorldY = (midY - camTy) / camScale;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+
+  if (touchMode === 'single' && e.touches.length === 1) {
+    const t = e.touches[0];
+    const dx = t.clientX - touchStartX;
+    const dy = t.clientY - touchStartY;
+
+    if (Math.hypot(dx, dy) > 7) {
+      touchMoved = true;
+      clearLongPress();
+      if (isEditing) exitEditMode(true);
+    }
+
+    if (touchMoved) {
+      camTx = touchPanBaseTx + dx;
+      camTy = touchPanBaseTy + dy;
+      if (isEditing) syncEditorPosition();
+      requestRender();
+    }
+  } else if (touchMode === 'pinch' && e.touches.length >= 2) {
+    const t1 = e.touches[0], t2 = e.touches[1];
+    const dist = Math.max(10, getTouchDistance(t1, t2));
+    const newScale = Math.min(Math.max(pinchInitScale * (dist / pinchInitDist), 0.08), 4.0);
+
+    const midX = (t1.clientX + t2.clientX) * 0.5 - rect.left;
+    const midY = (t1.clientY + t2.clientY) * 0.5 - rect.top;
+
+    camScale = newScale;
+    camTx = midX - pinchMidWorldX * camScale;
+    camTy = midY - pinchMidWorldY * camScale;
+
+    if (isEditing) syncEditorPosition();
+    requestRender();
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  clearLongPress();
+
+  if (touchMode === 'single' && !touchMoved && !longPressTriggered && e.changedTouches.length > 0) {
+    const t = e.changedTouches[0];
+    const rect = canvas.getBoundingClientRect();
+    const wx = (t.clientX - rect.left - camTx) / camScale;
+    const wy = (t.clientY - rect.top - camTy) / camScale;
+
+    const hit = hitTestWithBVH(wx, wy, true);
+
+    if (!hit) {
+      if (isEditing) exitEditMode(true);
+    } else if (hit.type === 'fold_badge') {
+      if (isEditing) exitEditMode(true);
+      dispatchAction('fold', { nodeIds: [hit.node[0]], forceUnfold: false });
+    } else if (hit.type === 'node') {
+      const tappedId = hit.node[0];
+      const now = performance.now();
+
+      if (now - lastTapTime < 300 && lastTapNodeId === tappedId) {
+        lastTapTime = 0;
+        lastTapNodeId = null;
+        cursorId = tappedId;
+        selectedSet.clear();
+        selectedSet.add(tappedId);
+        enterEditMode();
+      } else {
+        lastTapTime = now;
+        lastTapNodeId = tappedId;
+        if (isEditing && cursorId !== tappedId) exitEditMode(true);
+
+        if (mobileMultiSelectMode) {
+          cursorId = tappedId;
+          toggleCursorNodeSelection();
+        } else {
+          cursorId = tappedId;
+          selectedSet.clear();
+          selectedSet.add(tappedId);
+          updateStatusBadge();
+          requestRender();
+        }
+      }
+    }
+  }
+
+  if (e.touches.length === 0) {
+    touchMode = 'none';
+  } else if (e.touches.length === 1) {
+    const t = e.touches[0];
+    touchMode = 'single';
+    touchMoved = true;
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+    touchPanBaseTx = camTx;
+    touchPanBaseTy = camTy;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchcancel', () => {
+  clearLongPress();
+  touchMode = 'none';
+});
+
+// ==========================================
+// 13. 초기 부팅 시퀀스
+// ==========================================
+(async function initApp() {
+  resizeCanvas();
+  updateGhButtonUI();
+  const restored = await restoreAutoBackupOnLoad();
+  if (!restored) {
+    applyEngineState(engine.getStatePayload(engine.rootId, [engine.rootId]));
+  }
+})();
+</script>
+</body>
+</html>
